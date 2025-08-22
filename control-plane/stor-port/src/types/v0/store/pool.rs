@@ -402,6 +402,7 @@ impl From<PoolSpec> for models::PoolSpec {
                 )),
             },
         };
+
         Self::new_all(
             src.disks,
             src.id,
@@ -410,6 +411,7 @@ impl From<PoolSpec> for models::PoolSpec {
             src.status,
             encryption,
             src.cordon_drain.into_opt(),
+            src.pool_config.map(Into::into),
         )
     }
 }
@@ -735,6 +737,18 @@ impl From<CordonDrainState> for models::PoolCordonDrain {
                     import: state.import,
                 };
                 Self::cordoned(cs)
+            }
+        }
+    }
+}
+
+impl From<PoolConfig> for models::PoolConfig {
+    fn from(src: PoolConfig) -> Self {
+        match src {
+            PoolConfig::Raid0 { strip_size } => {
+                let strip_size_kb = (strip_size / 1024) as i32;
+                let raid0_config = models::Raid0Config::new(strip_size_kb);
+                models::PoolConfig::new_all(Some(raid0_config))
             }
         }
     }

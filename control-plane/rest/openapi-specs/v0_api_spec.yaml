@@ -2567,6 +2567,10 @@ components:
            Blobstore cluster size for the pool, in bytes. Must be >= 4 MiB and in multiples of 4MiB.
            This is an advanced option. Please refer documentation to understand the implications
            of changing this.
+        pool_config:
+          description: Optional pool configuration for RAID0 and other pool types
+          allOf:
+            - $ref: '#/components/schemas/PoolConfig'
       required:
         - disks
     HostNqn:
@@ -3549,6 +3553,10 @@ components:
           description: the cordon and drain state
           allOf:
             - $ref: '#/components/schemas/PoolCordonDrain'
+        pool_config:
+          description: Optional pool configuration for RAID0 and other pool types
+          allOf:
+            - $ref: '#/components/schemas/PoolConfig'
       required:
         - disks
         - id
@@ -4546,6 +4554,23 @@ components:
           example: pool-secret-encr
       required:
         - name
+    PoolConfig:
+      description: Pool configuration for different pool types
+      type: object
+      properties:
+        raid0:
+          $ref: '#/components/schemas/Raid0Config'
+    Raid0Config:
+      description: RAID0 configuration parameters
+      type: object
+      properties:
+        strip_size_kb:
+          description: RAID0 strip size in kilobytes
+          type: integer
+          format: int32
+          default: 64
+      required:
+        - strip_size_kb
   responses:
     ClientError:
       description: Client side error

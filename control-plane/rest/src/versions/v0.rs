@@ -9,7 +9,7 @@ pub use stor_port::{
         openapi::{
             apis, apis::actix_server::RestError, models, models::RestJsonError, tower::client,
         },
-        store::pool::PoolLabel,
+        store::pool::{PoolConfig, PoolLabel},
         transport::{
             AddNexusChild, BlockDevice, Child, ChildUri, CreateNexus, CreatePool, CreateReplica,
             CreateVolume, DestroyNexus, DestroyPool, DestroyReplica, DestroyVolume, Filter,
@@ -80,14 +80,30 @@ pub struct CreatePoolBody {
     pub encryption: Option<Encryption>,
     /// Blobstore cluster size for the pool
     pub cluster_size: Option<u32>,
+    /// Pool configuration for RAID0 and other pool types
+    pub pool_config: Option<PoolConfig>,
 }
 impl From<models::CreatePoolBody> for CreatePoolBody {
     fn from(src: models::CreatePoolBody) -> Self {
+        let pool_config: Option<PoolConfig> = src.pool_config.map(|src| match src.raid0 {
+            Some(raid0_config) => PoolConfig::Raid0 {
+                strip_size: (raid0_config.strip_size_kb * 1024) as u64,
+            },
+            None => {
+                // This shouldn't happen as we expect at least one config type
+                // Default to a reasonable RAID0 configuration
+                PoolConfig::Raid0 {
+                    strip_size: 64 * 1024,
+                }
+            }
+        });
+
         Self {
             disks: src.disks.iter().cloned().map(From::from).collect(),
             labels: src.labels,
             encryption: src.encryption.into_opt(),
             cluster_size: src.cluster_size.map(|v| v as u32),
+            pool_config,
         }
     }
 }
@@ -100,6 +116,7 @@ impl TryFrom<CreatePool> for CreatePoolBody {
             labels: create.labels,
             encryption: create.encryption.try_into_opt()?,
             cluster_size: create.cluster_size,
+            pool_config: create.pool_config,
         })
     }
 }
@@ -113,7 +130,7 @@ impl CreatePoolBody {
             labels: self.labels.clone(),
             encryption: self.encryption.clone().into_opt(),
             cluster_size: self.cluster_size,
-            pool_config: None,
+            pool_config: self.pool_config.clone(),
         }
     }
 }
