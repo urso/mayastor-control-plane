@@ -15,6 +15,52 @@ pub fn default_pool_cluster_size() -> u32 {
     POOL_BS_CLUSTER_SIZE_DEFAULT
 }
 
+/// Pool validation error types providing specific, actionable error information.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PoolValidationError {
+    /// Pool has invalid disk count for its configuration.
+    InvalidDiskCount {
+        disk_count: usize,
+        minimum_required: usize,
+        reason: String,
+    },
+    /// RAID0 strip size is invalid.
+    Raid0InvalidStripSize {
+        strip_size: u64,
+        minimum_size: u64,
+        reason: String,
+    },
+}
+
+impl std::fmt::Display for PoolValidationError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            PoolValidationError::InvalidDiskCount {
+                disk_count,
+                minimum_required,
+                reason,
+            } => {
+                write!(
+                    f,
+                    "Invalid disk count: {disk_count} disks provided, {minimum_required} required. {reason}"
+                )
+            }
+            PoolValidationError::Raid0InvalidStripSize {
+                strip_size,
+                minimum_size,
+                reason,
+            } => {
+                write!(
+                    f,
+                    "Invalid RAID0 strip size: {strip_size} bytes (minimum {minimum_size}). {reason}"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for PoolValidationError {}
+
 // PoolLabel is the type for the labels
 pub type PoolLabel = HashMap<String, String>;
 
@@ -56,6 +102,7 @@ impl From<&CreatePool> for PoolSpec {
             id: request.id.clone(),
             disks: request.disks.clone(),
             status: PoolSpecStatus::Creating,
+            pool_config: request.pool_config.clone(),
             labels: request.labels.clone(),
             sequencer: OperationSequence::new(),
             operation: None,
@@ -73,6 +120,7 @@ impl From<&PoolSpec> for CreatePool {
             node: pool.node.clone(),
             id: pool.id.clone(),
             disks: pool.disks.clone(),
+            pool_config: pool.pool_config.clone(),
             labels: pool.labels.clone(),
             encryption: pool.encryption.clone(),
             cluster_size: Some(pool.cluster_size),
@@ -104,6 +152,51 @@ pub struct EncryptionSecret {
     pub name: String,
 }
 
+/// Pool configuration specifying the type and parameters.
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+pub enum PoolConfig {
+    /// RAID0 configuration with strip size.
+    Raid0 { strip_size: u64 },
+    // Future: Raid1 { mirror_policy: MirrorPolicy },
+}
+
+impl PoolConfig {
+    /// Validate pool configuration parameters.
+    pub fn validate(&self, disk_count: usize) -> Result<(), PoolValidationError> {
+        match self {
+            PoolConfig::Raid0 { strip_size } => {
+                if disk_count < 2 {
+                    return Err(PoolValidationError::InvalidDiskCount {
+                        disk_count,
+                        minimum_required: 2,
+                        reason: "RAID0 configuration requires at least 2 disks".to_string(),
+                    });
+                }
+                if *strip_size == 0 || !strip_size.is_power_of_two() || *strip_size < 4096 {
+                    let reason = if *strip_size == 0 {
+                        "Strip size must be greater than 0".to_string()
+                    } else {
+                        "Strip size must be a power of 2 and at least 4KB".to_string()
+                    };
+                    return Err(PoolValidationError::Raid0InvalidStripSize {
+                        strip_size: *strip_size,
+                        minimum_size: 4096,
+                        reason,
+                    });
+                }
+                Ok(())
+            }
+        }
+    }
+
+    /// Check if this configuration requires multiple disks.
+    pub fn requires_multiple_disks(&self) -> bool {
+        match self {
+            PoolConfig::Raid0 { .. } => true,
+        }
+    }
+}
+
 /// User specification of a pool.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct PoolSpec {
@@ -115,6 +208,9 @@ pub struct PoolSpec {
     pub disks: Vec<PoolDeviceUri>,
     /// status of the pool
     pub status: PoolSpecStatus,
+    /// pool configuration specifying the type and parameters
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pool_config: Option<PoolConfig>,
     /// labels to be set on the pool
     #[serde(skip_serializing_if = "Option::is_none")]
     pub labels: Option<PoolLabel>,
@@ -203,6 +299,25 @@ impl PoolSpec {
                 }
             }
         }
+    }
+
+    /// Validate pool specification.
+    pub fn validate(&self) -> Result<(), PoolValidationError> {
+        // Multi-device pools require explicit pool configuration
+        if self.disks.len() > 1 && self.pool_config.is_none() {
+            return Err(PoolValidationError::InvalidDiskCount {
+                disk_count: self.disks.len(),
+                minimum_required: 1,
+                reason: "Multi-device pools require explicit pool configuration".to_string(),
+            });
+        }
+
+        // Validate pool configuration if present
+        if let Some(config) = &self.pool_config {
+            config.validate(self.disks.len())?;
+        }
+
+        Ok(())
     }
 
     /// Cordon the pool.

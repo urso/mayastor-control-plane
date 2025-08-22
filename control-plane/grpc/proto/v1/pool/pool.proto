@@ -44,6 +44,8 @@ message PoolSpec {
   string pool_id = 2;
   // absolute disk paths claimed by the pool
   repeated string disks = 3;
+  // pool configuration specifying the type and parameters
+  optional PoolConfig pool_config = 4;
   // labels to be set on the pool
   optional common.StringMapValue labels = 5;
   // Encryption details
@@ -100,6 +102,19 @@ message GetPoolsRequest {
   }
 }
 
+// Pool configuration specifying the type and parameters
+message PoolConfig {
+  oneof config {
+    Raid0Config raid0 = 1;
+  }
+}
+
+// RAID0 configuration parameters
+message Raid0Config {
+  // Strip size in KB (default 64)
+  uint32 strip_size_kb = 1;
+}
+
 // Create Pool Request
 message CreatePoolRequest {
   // id of the io-engine instance
@@ -108,6 +123,8 @@ message CreatePoolRequest {
   string pool_id = 2;
   // disk device paths or URIs to be claimed by the pool
   repeated string disks = 3;
+  // pool configuration specifying the type and parameters
+  optional PoolConfig pool_config = 4;
   // labels to be set on the pool
   optional common.StringMapValue labels = 5;
   // Encryption parameters for this pool. Either as raw key params, OR a name to a Kubernetes

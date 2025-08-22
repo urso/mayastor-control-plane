@@ -123,6 +123,7 @@ impl TryFrom<pool::PoolDefinition> for PoolSpec {
             cluster_size: pool_spec
                 .cluster_size
                 .unwrap_or(POOL_BS_CLUSTER_SIZE_DEFAULT),
+            pool_config: None,
         })
     }
 }
@@ -215,6 +216,7 @@ impl From<PoolSpec> for pool::PoolDefinition {
                     None => None,
                 },
                 cluster_size: Some(pool_spec.cluster_size),
+                pool_config: None,
             }),
             metadata: Some(pool::Metadata {
                 uuid: None,
@@ -411,6 +413,7 @@ impl From<&dyn CreatePoolInfo> for CreatePoolRequest {
                 .map(|labels| crate::common::StringMapValue { value: labels }),
             encryption: data.encryption().into_opt(),
             cluster_size: data.cluster_size(),
+            pool_config: None,
         }
     }
 }
@@ -424,6 +427,7 @@ impl From<&dyn CreatePoolInfo> for CreatePool {
             labels: data.labels(),
             encryption: data.encryption(),
             cluster_size: data.cluster_size(),
+            pool_config: None,
         }
     }
 }

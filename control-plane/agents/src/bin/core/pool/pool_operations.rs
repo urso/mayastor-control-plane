@@ -40,11 +40,31 @@ impl ResourceLifecycle for OperationGuardArc<PoolSpec> {
             });
         }
 
-        if request.disks.len() != 1 {
-            return Err(SvcError::InvalidPoolDeviceNum {
-                disks: request.disks.clone(),
-            });
-        }
+        // Convert CreatePool request to PoolSpec and validate
+        let pool_spec = PoolSpec::from(request);
+        pool_spec.validate().map_err(|validation_error| {
+            use stor_port::types::v0::store::pool::PoolValidationError;
+            match validation_error {
+                PoolValidationError::InvalidDiskCount {
+                    disk_count,
+                    minimum_required,
+                    reason,
+                } => SvcError::InvalidPoolDiskCount {
+                    disk_count,
+                    minimum_required,
+                    reason,
+                },
+                PoolValidationError::Raid0InvalidStripSize {
+                    strip_size,
+                    minimum_size,
+                    reason,
+                } => SvcError::InvalidRaid0StripSize {
+                    strip_size,
+                    minimum_size,
+                    reason,
+                },
+            }
+        })?;
 
         let pool_get_result = registry.specs().pool(&request.id);
         if let Ok(pool) = &pool_get_result {

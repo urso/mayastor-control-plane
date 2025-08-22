@@ -65,6 +65,7 @@ async fn pool() {
                 labels: None,
                 encryption: None,
                 cluster_size: None,
+                pool_config: None,
             },
             None,
         )
@@ -79,6 +80,7 @@ async fn pool() {
                 labels: None,
                 encryption: None,
                 cluster_size: None,
+                pool_config: None,
             },
             None,
         )
@@ -359,6 +361,7 @@ async fn volume_repl_placement_with_cluster_size() {
         labels: None,
         encryption: None,
         cluster_size: None,
+        pool_config: None,
     };
 
     let pool_32m_1 = CreatePool {
@@ -368,6 +371,7 @@ async fn volume_repl_placement_with_cluster_size() {
         labels: None,
         encryption: None,
         cluster_size: Some(33554432),
+        pool_config: None,
     };
 
     let pool_32m_2 = CreatePool {
@@ -377,6 +381,7 @@ async fn volume_repl_placement_with_cluster_size() {
         labels: None,
         encryption: None,
         cluster_size: Some(33554432),
+        pool_config: None,
     };
 
     let _ = client.pool().create(&pool_4m_1, None).await.unwrap();
@@ -1225,6 +1230,7 @@ async fn destroy_after_restart() {
         labels: None,
         encryption: None,
         cluster_size: None,
+        pool_config: None,
     };
 
     client.pool().destroy(&destroy, None).await.unwrap();
@@ -1261,6 +1267,7 @@ async fn slow_create() {
             labels: Some(PoolLabel::from([("a".into(), "b".into())])),
             encryption: None,
             cluster_size: None,
+            pool_config: None,
         };
 
         let result = client.pool().create(&create, None).await;
@@ -1420,6 +1427,7 @@ async fn reject_devlink_reuse() {
                 name: SECRETFILE.to_string(),
             })),
             cluster_size: None,
+            pool_config: None,
         };
 
         client
@@ -1441,6 +1449,7 @@ async fn reject_devlink_reuse() {
                 name: SECRETFILE.to_string(),
             })),
             cluster_size: None,
+            pool_config: None,
         };
 
         client
@@ -1492,6 +1501,7 @@ async fn reject_devlink_reuse() {
             labels: None,
             encryption: None,
             cluster_size: None,
+            pool_config: None,
         };
 
         client

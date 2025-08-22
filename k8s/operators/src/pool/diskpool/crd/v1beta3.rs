@@ -41,6 +41,9 @@ pub struct DiskPoolSpec {
     /// Use to create encrypted pool.
     #[serde(rename = "encryptionConfig")]
     pub encryption_config: Option<EncryptionConfig>,
+    /// Pool configuration specifying the type and parameters.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pool: Option<PoolConfig>,
 }
 
 /// Placement pool topology used by volume operations.
@@ -70,6 +73,20 @@ pub struct EncryptionSecretConfig {
     pub name: String,
 }
 
+/// Pool configuration types.
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, JsonSchema)]
+pub enum PoolConfig {
+    #[serde(rename = "raid0")]
+    Raid0(Raid0Config),
+}
+
+/// RAID0 configuration parameters.
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, JsonSchema)]
+pub struct Raid0Config {
+    #[serde(rename = "stripSize")]
+    pub strip_size: Quantity,
+}
+
 impl DiskPoolSpec {
     /// Create a new DiskPoolSpec from the node and the disks.
     pub fn new(
@@ -83,6 +100,7 @@ impl DiskPoolSpec {
             disks,
             topology,
             encryption_config,
+            pool: None,
         }
     }
     /// The node the pool is placed on.

@@ -113,6 +113,7 @@ impl CreatePoolBody {
             labels: self.labels.clone(),
             encryption: self.encryption.clone().into_opt(),
             cluster_size: self.cluster_size,
+            pool_config: None,
         }
     }
 }

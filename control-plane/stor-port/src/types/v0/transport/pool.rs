@@ -1,7 +1,7 @@
 use super::*;
 
 use crate::{
-    types::v0::store::pool::{Encryption, EncryptionSecret, PoolLabel, PoolSpec},
+    types::v0::store::pool::{Encryption, EncryptionSecret, PoolConfig, PoolLabel, PoolSpec},
     IntoOption,
 };
 use serde::{Deserialize, Serialize};
@@ -290,6 +290,8 @@ pub struct CreatePool {
     pub id: PoolId,
     /// Disk device paths or URIs to be claimed by the pool.
     pub disks: Vec<PoolDeviceUri>,
+    /// Pool configuration specifying the type and parameters.
+    pub pool_config: Option<PoolConfig>,
     /// Labels to be set on the pool.
     pub labels: Option<PoolLabel>,
     /// Encryption parameters for this pool.
@@ -304,6 +306,7 @@ impl CreatePool {
         node: &NodeId,
         id: &PoolId,
         disks: &[PoolDeviceUri],
+        pool_config: &Option<PoolConfig>,
         labels: &Option<PoolLabel>,
         encryption: &Option<Encryption>,
         cluster_size: &Option<u32>,
@@ -312,6 +315,7 @@ impl CreatePool {
             node: node.clone(),
             id: id.clone(),
             disks: disks.to_vec(),
+            pool_config: pool_config.clone(),
             labels: labels.clone(),
             encryption: encryption.clone(),
             cluster_size: *cluster_size,
