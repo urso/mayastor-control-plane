@@ -335,6 +335,8 @@ pub struct ImportPool {
     pub disks: Vec<PoolDeviceUri>,
     /// The pool uuid if specified.
     pub uuid: Option<PoolUuid>,
+    /// Pool configuration specifying the type and parameters.
+    pub pool_config: Option<PoolConfig>,
     /// Encryption parameters for this pool.
     pub encryption: Option<Encryption>,
 }
@@ -345,6 +347,7 @@ impl ImportPool {
         node: &NodeId,
         id: &PoolId,
         disks: &[PoolDeviceUri],
+        pool_config: &Option<PoolConfig>,
         encryption: &Option<Encryption>,
     ) -> Self {
         Self {
@@ -352,6 +355,7 @@ impl ImportPool {
             id: id.clone(),
             disks: disks.to_vec(),
             uuid: None,
+            pool_config: pool_config.clone(),
             encryption: encryption.clone(),
         }
     }

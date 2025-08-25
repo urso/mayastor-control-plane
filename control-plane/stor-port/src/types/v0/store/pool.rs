@@ -155,8 +155,8 @@ pub struct EncryptionSecret {
 /// Pool configuration specifying the type and parameters.
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub enum PoolConfig {
-    /// RAID0 configuration with strip size.
-    Raid0 { strip_size: u64 },
+    /// RAID0 configuration with strip size in KB.
+    Raid0 { strip_size_kb: u32 },
     // Future: Raid1 { mirror_policy: MirrorPolicy },
 }
 
@@ -164,7 +164,7 @@ impl PoolConfig {
     /// Validate pool configuration parameters.
     pub fn validate(&self, disk_count: usize) -> Result<(), PoolValidationError> {
         match self {
-            PoolConfig::Raid0 { strip_size } => {
+            PoolConfig::Raid0 { strip_size_kb } => {
                 if disk_count < 2 {
                     return Err(PoolValidationError::InvalidDiskCount {
                         disk_count,
@@ -172,14 +172,14 @@ impl PoolConfig {
                         reason: "RAID0 configuration requires at least 2 disks".to_string(),
                     });
                 }
-                if *strip_size == 0 || !strip_size.is_power_of_two() || *strip_size < 4096 {
-                    let reason = if *strip_size == 0 {
+                if *strip_size_kb == 0 || !strip_size_kb.is_power_of_two() || *strip_size_kb < 4 {
+                    let reason = if *strip_size_kb == 0 {
                         "Strip size must be greater than 0".to_string()
                     } else {
                         "Strip size must be a power of 2 and at least 4KB".to_string()
                     };
                     return Err(PoolValidationError::Raid0InvalidStripSize {
-                        strip_size: *strip_size,
+                        strip_size: (*strip_size_kb as u64) * 1024, // Convert to bytes for error message
                         minimum_size: 4096,
                         reason,
                     });
@@ -377,6 +377,7 @@ impl From<&PoolSpec> for ImportPool {
             id: value.id.clone(),
             disks: value.disks.clone(),
             uuid: None,
+            pool_config: value.pool_config.clone(),
             encryption: value.encryption.clone(),
         }
     }
@@ -745,9 +746,9 @@ impl From<CordonDrainState> for models::PoolCordonDrain {
 impl From<PoolConfig> for models::PoolConfig {
     fn from(src: PoolConfig) -> Self {
         match src {
-            PoolConfig::Raid0 { strip_size } => {
-                let strip_size_kb = (strip_size / 1024) as i32;
-                let raid0_config = models::Raid0Config::new(strip_size_kb);
+            PoolConfig::Raid0 { strip_size_kb } => {
+                // No conversion needed - already in KB units throughout the stack
+                let raid0_config = models::Raid0Config::new(strip_size_kb as i32);
                 models::PoolConfig::new_all(Some(raid0_config))
             }
         }

@@ -149,7 +149,7 @@ async fn missing_pool_state_reconciler(
         async {
             pool_spec.warn_span(|| tracing::warn!("Attempting to import the pool"));
 
-            let request = ImportPool::new(&pool_spec.node, &pool_spec.id, &pool_spec.disks, &pool_spec.encryption);
+            let request = ImportPool::new(&pool_spec.node, &pool_spec.id, &pool_spec.disks, &pool_spec.pool_config, &pool_spec.encryption);
             match node.import_pool(&request).await {
                 Ok(_) => {
                     pool_spec.info_span(|| tracing::info!("Pool successfully imported"));

@@ -85,17 +85,12 @@ pub struct CreatePoolBody {
 }
 impl From<models::CreatePoolBody> for CreatePoolBody {
     fn from(src: models::CreatePoolBody) -> Self {
-        let pool_config: Option<PoolConfig> = src.pool_config.map(|src| match src.raid0 {
-            Some(raid0_config) => PoolConfig::Raid0 {
-                strip_size: (raid0_config.strip_size_kb * 1024) as u64,
-            },
-            None => {
-                // This shouldn't happen as we expect at least one config type
-                // Default to a reasonable RAID0 configuration
-                PoolConfig::Raid0 {
-                    strip_size: 64 * 1024,
-                }
-            }
+        let pool_config = src.pool_config.map(|src| {
+            let strip_size_kb = src
+                .raid0
+                .map(|raid0| raid0.strip_size_kb as u32)
+                .unwrap_or(64);
+            PoolConfig::Raid0 { strip_size_kb }
         });
 
         Self {

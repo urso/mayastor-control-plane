@@ -11,7 +11,7 @@ use stor_port::{
     transport_api::ResourceKind,
     types::v0::{
         openapi::apis::IntoVec,
-        store::pool::{Encryption, EncryptionSecret},
+        store::pool::{Encryption, EncryptionSecret, PoolConfig},
         transport::{
             self, ChildState, ChildStateReason, Nexus, NexusId, NexusNvmePreemption,
             NexusNvmfConfig, NexusStatus, NodeId, NvmeReservation, PoolState, PoolUuid, Protocol,
@@ -679,6 +679,12 @@ impl AgentToIoEngine for transport::CreatePool {
                 .encryption
                 .clone()
                 .map(|encryption| From::from(ExternalType(encryption))),
+            // Pass RAID0 configuration to io-engine for multi-device pools
+            // None = standard LVS pool, Some(Raid0) = RAID0 striped pool
+            pool_config: self
+                .pool_config
+                .clone()
+                .map(|config| From::from(ExternalType(config))),
         }
     }
 }
@@ -706,6 +712,10 @@ impl AgentToIoEngine for transport::ImportPool {
                 .encryption
                 .clone()
                 .map(|encryption| From::from(ExternalType(encryption))),
+            pool_config: self
+                .pool_config
+                .clone()
+                .map(|config| From::from(ExternalType(config))),
         }
     }
 }
@@ -902,6 +912,21 @@ impl From<ExternalType<EncryptionSecret>> for v1::pb::EncryptionSecret {
     fn from(value: ExternalType<EncryptionSecret>) -> Self {
         Self {
             secret: value.0.name,
+        }
+    }
+}
+
+impl From<ExternalType<PoolConfig>> for v1::pb::PoolConfig {
+    fn from(value: ExternalType<PoolConfig>) -> Self {
+        match value.0 {
+            PoolConfig::Raid0 { strip_size_kb } => {
+                // No conversion needed - already in KB units throughout the stack
+                v1::pb::PoolConfig {
+                    config: Some(v1::pb::pool_config::Config::Raid0(v1::pb::Raid0Config {
+                        strip_size_kb,
+                    })),
+                }
+            }
         }
     }
 }

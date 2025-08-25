@@ -497,6 +497,7 @@ pub mod io_engine {
                     cluster_size: None,
                     md_args: None,
                     encryption: None,
+                    pool_config: None,
                 })
                 .await?;
             Ok(())
