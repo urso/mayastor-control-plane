@@ -172,6 +172,15 @@ impl From<VolumeSpec> for volume::VolumeDefinition {
                 max_snapshots: volume_spec.max_snapshots,
                 encrypted: Some(volume_spec.encrypted),
                 cluster_size: Some(volume_spec.cluster_size),
+                qos: volume_spec
+                    .qos
+                    .is_configured()
+                    .then_some(volume::VolumeQos {
+                        iops_limit: volume_spec.qos.iops_limit,
+                        bandwidth_limit: volume_spec.qos.bandwidth_limit,
+                        read_bandwidth_limit: volume_spec.qos.read_bandwidth_limit,
+                        write_bandwidth_limit: volume_spec.qos.write_bandwidth_limit,
+                    }),
             }),
             metadata: Some(volume::Metadata {
                 spec_status: spec_status as i32,
@@ -387,6 +396,15 @@ impl TryFrom<volume::VolumeDefinition> for VolumeSpec {
             cluster_size: volume_spec
                 .cluster_size
                 .unwrap_or(POOL_BS_CLUSTER_SIZE_DEFAULT),
+            qos: volume_spec
+                .qos
+                .map(|qos| stor_port::types::v0::store::volume::VolumeQos {
+                    iops_limit: qos.iops_limit,
+                    bandwidth_limit: qos.bandwidth_limit,
+                    read_bandwidth_limit: qos.read_bandwidth_limit,
+                    write_bandwidth_limit: qos.write_bandwidth_limit,
+                })
+                .unwrap_or_default(),
         };
         Ok(volume_spec)
     }
@@ -1849,6 +1867,18 @@ impl From<SetVolumePropertyRequest> for Option<VolumeProperty> {
                     VolumeProperty::MaxSnapshots(value)
                 }
                 volume::volume_property::Attr::Encrypted(value) => VolumeProperty::Encrypted(value),
+                volume::volume_property::Attr::QosIopsLimit(volume::QosIopsLimitValue {
+                    value,
+                }) => VolumeProperty::QosIopsLimit(value),
+                volume::volume_property::Attr::QosBandwidthLimit(
+                    volume::QosBandwidthLimitValue { value },
+                ) => VolumeProperty::QosBandwidthLimit(value),
+                volume::volume_property::Attr::QosReadBandwidthLimit(
+                    volume::QosReadBandwidthLimitValue { value },
+                ) => VolumeProperty::QosReadBandwidthLimit(value),
+                volume::volume_property::Attr::QosWriteBandwidthLimit(
+                    volume::QosWriteBandwidthLimitValue { value },
+                ) => VolumeProperty::QosWriteBandwidthLimit(value),
             })
         })
     }
@@ -1864,6 +1894,26 @@ impl From<VolumeProperty> for volume::VolumeProperty {
             },
             VolumeProperty::Encrypted(value) => volume::VolumeProperty {
                 attr: Some(volume::volume_property::Attr::Encrypted(value)),
+            },
+            VolumeProperty::QosIopsLimit(value) => volume::VolumeProperty {
+                attr: Some(volume::volume_property::Attr::QosIopsLimit(
+                    volume::QosIopsLimitValue { value },
+                )),
+            },
+            VolumeProperty::QosBandwidthLimit(value) => volume::VolumeProperty {
+                attr: Some(volume::volume_property::Attr::QosBandwidthLimit(
+                    volume::QosBandwidthLimitValue { value },
+                )),
+            },
+            VolumeProperty::QosReadBandwidthLimit(value) => volume::VolumeProperty {
+                attr: Some(volume::volume_property::Attr::QosReadBandwidthLimit(
+                    volume::QosReadBandwidthLimitValue { value },
+                )),
+            },
+            VolumeProperty::QosWriteBandwidthLimit(value) => volume::VolumeProperty {
+                attr: Some(volume::volume_property::Attr::QosWriteBandwidthLimit(
+                    volume::QosWriteBandwidthLimitValue { value },
+                )),
             },
         }
     }

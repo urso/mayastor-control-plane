@@ -210,6 +210,9 @@ pub struct VolumeSpec {
     /// Max snapshots limit per volume.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_snapshots: Option<u32>,
+    /// QoS properties.
+    #[serde(default, skip_serializing_if = "super::is_default")]
+    pub qos: VolumeQos,
     /// Data encryption.
     #[serde(default)]
     pub encrypted: bool,
@@ -387,6 +390,16 @@ impl VolumeSpec {
     pub fn snapshot_as_thin(&self) -> Option<bool> {
         self.metadata.persisted.snapshot_as_thin
     }
+    /// Get the QoS properties.
+    pub fn qos(&self) -> &VolumeQos {
+        &self.qos
+    }
+    pub fn qos_mut(&mut self) -> &mut VolumeQos {
+        &mut self.qos
+    }
+    pub fn has_qos_properties(&self) -> bool {
+        self.qos.is_configured()
+    }
     /// Get the currently active target.
     pub fn target(&self) -> Option<&VolumeTarget> {
         self.target_config
@@ -535,6 +548,18 @@ impl SpecTransaction<VolumeOperation> for VolumeSpec {
                     }
                     VolumeProperty::Encrypted(encrypted) => {
                         self.encrypted = encrypted;
+                    }
+                    VolumeProperty::QosIopsLimit(limit) => {
+                        self.qos.iops_limit = Some(limit);
+                    }
+                    VolumeProperty::QosBandwidthLimit(limit) => {
+                        self.qos.bandwidth_limit = Some(limit);
+                    }
+                    VolumeProperty::QosReadBandwidthLimit(limit) => {
+                        self.qos.read_bandwidth_limit = Some(limit);
+                    }
+                    VolumeProperty::QosWriteBandwidthLimit(limit) => {
+                        self.qos.write_bandwidth_limit = Some(limit);
                     }
                 },
             }
@@ -892,5 +917,26 @@ impl AffinityGroupSpec {
     /// Check if the Affinity Group has any more volumes.
     pub fn is_empty(&self) -> bool {
         self.volumes.is_empty()
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
+pub struct VolumeQos {
+    /// QoS IOPS limit per second.
+    pub iops_limit: Option<u32>,
+    /// QoS bandwidth limit in MB/s.
+    pub bandwidth_limit: Option<u32>,
+    /// QoS read bandwidth limit in MB/s.
+    pub read_bandwidth_limit: Option<u32>,
+    /// QoS write bandwidth limit in MB/s.
+    pub write_bandwidth_limit: Option<u32>,
+}
+
+impl VolumeQos {
+    pub fn is_configured(&self) -> bool {
+        self.iops_limit.is_some()
+            || self.bandwidth_limit.is_some()
+            || self.read_bandwidth_limit.is_some()
+            || self.write_bandwidth_limit.is_some()
     }
 }

@@ -112,6 +112,72 @@ pub enum VolumeProperty {
     MaxSnapshots(u32),
     /// Volume is required to be encrypted.
     Encrypted(bool),
+    /// QoS IOPS limit per second.
+    QosIopsLimit(u32),
+    /// QoS bandwidth limit in MB/s.
+    QosBandwidthLimit(u32),
+    /// QoS read bandwidth limit in MB/s.
+    QosReadBandwidthLimit(u32),
+    /// QoS write bandwidth limit in MB/s.
+    QosWriteBandwidthLimit(u32),
+}
+
+impl VolumeProperty {
+    /// SPDK minimum IOPS limit.
+    pub const MIN_IOPS_LIMIT: u32 = 1000;
+    /// SPDK minimum bandwidth limit in MB/s.
+    pub const MIN_BANDWIDTH_LIMIT_MB: u32 = 1;
+
+    /// Validate the QoS property value against SPDK minimums.
+    pub fn validate(&self) -> Result<(), String> {
+        match self {
+            VolumeProperty::QosIopsLimit(limit) => {
+                if *limit < Self::MIN_IOPS_LIMIT {
+                    Err(format!(
+                        "IOPS limit {} is below minimum of {}",
+                        limit,
+                        Self::MIN_IOPS_LIMIT
+                    ))
+                } else {
+                    Ok(())
+                }
+            }
+            VolumeProperty::QosBandwidthLimit(limit) => {
+                if *limit < Self::MIN_BANDWIDTH_LIMIT_MB {
+                    Err(format!(
+                        "Bandwidth limit {} MB/s is below minimum of {} MB/s",
+                        limit,
+                        Self::MIN_BANDWIDTH_LIMIT_MB
+                    ))
+                } else {
+                    Ok(())
+                }
+            }
+            VolumeProperty::QosReadBandwidthLimit(limit) => {
+                if *limit < Self::MIN_BANDWIDTH_LIMIT_MB {
+                    Err(format!(
+                        "Read bandwidth limit {} MB/s is below minimum of {} MB/s",
+                        limit,
+                        Self::MIN_BANDWIDTH_LIMIT_MB
+                    ))
+                } else {
+                    Ok(())
+                }
+            }
+            VolumeProperty::QosWriteBandwidthLimit(limit) => {
+                if *limit < Self::MIN_BANDWIDTH_LIMIT_MB {
+                    Err(format!(
+                        "Write bandwidth limit {} MB/s is below minimum of {} MB/s",
+                        limit,
+                        Self::MIN_BANDWIDTH_LIMIT_MB
+                    ))
+                } else {
+                    Ok(())
+                }
+            }
+            _ => Ok(()), // Other properties don't need QoS validation
+        }
+    }
 }
 
 #[derive(Default, Debug, Clone, Eq, PartialEq)]
