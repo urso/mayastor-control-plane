@@ -5,3 +5,6 @@
 pub(crate) mod client;
 /// DiskPool migration operations.
 pub(crate) mod crd;
+/// DiskPool unit tests.
+#[cfg(test)]
+mod tests;

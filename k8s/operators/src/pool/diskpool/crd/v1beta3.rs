@@ -41,9 +41,9 @@ pub struct DiskPoolSpec {
     /// Use to create encrypted pool.
     #[serde(rename = "encryptionConfig")]
     pub encryption_config: Option<EncryptionConfig>,
-    /// Pool configuration specifying the type and parameters.
+    /// RAID configuration specifying the type and parameters.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub pool: Option<PoolConfig>,
+    pub raid: Option<RaidConfig>,
 }
 
 /// Placement pool topology used by volume operations.
@@ -73,9 +73,10 @@ pub struct EncryptionSecretConfig {
     pub name: String,
 }
 
-/// Pool configuration types.
+/// RAID configuration with type-based deserialization.
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, JsonSchema)]
-pub enum PoolConfig {
+#[serde(tag = "type", content = "config", rename_all = "lowercase")]
+pub enum RaidConfig {
     #[serde(rename = "raid0")]
     Raid0(Raid0Config),
 }
@@ -85,6 +86,21 @@ pub enum PoolConfig {
 pub struct Raid0Config {
     #[serde(rename = "stripSize")]
     pub strip_size: Quantity,
+}
+
+#[cfg(feature = "openapi")]
+/// Convert CRD RaidConfig to transport layer RaidConfig
+impl From<RaidConfig> for openapi::models::RaidConfig {
+    fn from(crd_config: RaidConfig) -> Self {
+        match crd_config {
+            RaidConfig::Raid0(raid0_config) => {
+                // Convert bytes to KB for internal transport layer
+                let strip_size_kb = (raid0_config.strip_size.bytes() / 1024) as u32;
+                let openapi_raid0 = openapi::models::Raid0Config::new(strip_size_kb);
+                openapi::models::RaidConfig::raid0(openapi_raid0)
+            }
+        }
+    }
 }
 
 impl DiskPoolSpec {
@@ -100,7 +116,7 @@ impl DiskPoolSpec {
             disks,
             topology,
             encryption_config,
-            pool: None,
+            raid: None,
         }
     }
     /// The node the pool is placed on.

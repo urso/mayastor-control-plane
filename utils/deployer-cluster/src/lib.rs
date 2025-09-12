@@ -1136,7 +1136,7 @@ impl ClusterBuilder {
                         labels: None,
                         encryption: None,
                         cluster_size: None,
-                        pool_config: None,
+                        raid_config: None,
                     },
                     None,
                 )

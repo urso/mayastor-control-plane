@@ -1,5 +1,5 @@
 use super::crd::quantity::Quantity;
-use super::crd::v1beta3::{DiskPool, DiskPoolSpec, EncryptionSource, PoolConfig, Raid0Config};
+use super::crd::v1beta3::{DiskPool, DiskPoolSpec, EncryptionSource, Raid0Config, RaidConfig};
 use crate::{diskpool::crd::diskpools_name, error::Error, ApiVersion};
 use openapi::models::PoolSpecEncryption;
 use openapi::{apis::StatusCode, clients};
@@ -102,15 +102,18 @@ pub(crate) async fn create_missing_cr(
                             },
                         };
 
-                        // Convert OpenAPI pool_config to CRD pool_config if it exists
-                        let pool_config = spec.pool_config.as_ref().and_then(|openapi_config| {
-                            openapi_config.raid0.as_ref().map(|raid0_config| {
-                                // Convert from kilobytes to bytes (u64)
-                                let strip_size_bytes = (raid0_config.strip_size_kb as u64) * 1024;
-                                PoolConfig::Raid0(Raid0Config {
-                                    strip_size: Quantity(strip_size_bytes),
-                                })
-                            })
+                        // Convert OpenAPI raid_config to CRD raid_config if it exists
+                        let raid_config = spec.raid_config.as_ref().map(|openapi_config| {
+                            match openapi_config {
+                                openapi::models::RaidConfig::raid0(raid0_config) => {
+                                    // Convert u32 KB to bytes for Quantity
+                                    let strip_size_bytes =
+                                        (raid0_config.strip_size_kb as u64) * 1024;
+                                    RaidConfig::Raid0(Raid0Config {
+                                        strip_size: Quantity::from_bytes(strip_size_bytes),
+                                    })
+                                }
+                            }
                         });
 
                         let mut cr_spec: DiskPoolSpec = DiskPoolSpec::new(
@@ -120,7 +123,7 @@ pub(crate) async fn create_missing_cr(
                             encryption,
                         );
                         // Set the pool configuration if provided
-                        cr_spec.pool = pool_config;
+                        cr_spec.raid = raid_config;
                         let new_disk_pool: DiskPool = DiskPool::new(&pool.id, cr_spec);
                         if let Err(error) = pools_api.create(&param, &new_disk_pool).await {
                             info!(pool.id, spec.node, %error, "Failed to create CR for missing DiskPool");

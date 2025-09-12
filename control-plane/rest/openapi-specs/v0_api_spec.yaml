@@ -2567,10 +2567,10 @@ components:
            Blobstore cluster size for the pool, in bytes. Must be >= 4 MiB and in multiples of 4MiB.
            This is an advanced option. Please refer documentation to understand the implications
            of changing this.
-        pool_config:
-          description: Optional pool configuration for RAID0 and other pool types
+        raid_config:
+          description: Optional RAID configuration for RAID0 and other RAID types
           allOf:
-            - $ref: '#/components/schemas/PoolConfig'
+            - $ref: '#/components/schemas/RaidConfig'
       required:
         - disks
     HostNqn:
@@ -3210,6 +3210,10 @@ components:
           format: int64
           example: 4194304
           minimum: 4194304
+        raid_info:
+          description: RAID status information (present only for RAID pools)
+          allOf:
+            - $ref: '#/components/schemas/RaidInfo'
       required:
         - capacity
         - disks
@@ -3553,10 +3557,10 @@ components:
           description: the cordon and drain state
           allOf:
             - $ref: '#/components/schemas/PoolCordonDrain'
-        pool_config:
-          description: Optional pool configuration for RAID0 and other pool types
+        raid_config:
+          description: Optional RAID configuration for RAID0 and other RAID types
           allOf:
-            - $ref: '#/components/schemas/PoolConfig'
+            - $ref: '#/components/schemas/RaidConfig'
       required:
         - disks
         - id
@@ -4554,23 +4558,42 @@ components:
           example: pool-secret-encr
       required:
         - name
-    PoolConfig:
-      description: Pool configuration for different pool types
+    RaidConfig:
+      description: RAID configuration for different RAID types
       type: object
       properties:
         raid0:
           $ref: '#/components/schemas/Raid0Config'
+      # Require at least one RAID type to be specified
+      anyOf:
+        - required: ["raid0"]
     Raid0Config:
       description: RAID0 configuration parameters
       type: object
       properties:
         strip_size_kb:
-          description: RAID0 strip size in kilobytes
+          description: RAID0 strip size in KB (must be power of 2, >= 4, <= 65536)
           type: integer
           format: int32
+          minimum: 4
           default: 64
       required:
         - strip_size_kb
+    RaidInfo:
+      description: RAID status information as reported by io-engine
+      type: object
+      properties:
+        level:
+          description: RAID level (e.g. "raid0", "raid1", "raid5")
+          type: string
+          example: "raid0"
+        state:
+          description: RAID state (e.g. "online", "configuring", "offline")
+          type: string
+          example: "online"
+      required:
+        - level
+        - state
   responses:
     ClientError:
       description: Client side error

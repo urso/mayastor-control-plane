@@ -44,8 +44,8 @@ message PoolSpec {
   string pool_id = 2;
   // absolute disk paths claimed by the pool
   repeated string disks = 3;
-  // pool configuration specifying the type and parameters
-  optional PoolConfig pool_config = 4;
+  // RAID configuration specifying the type and parameters
+  optional RaidConfig raid_config = 4;
   // labels to be set on the pool
   optional common.StringMapValue labels = 5;
   // Encryption details
@@ -78,6 +78,8 @@ message PoolState {
   optional bool encrypted = 8;
   // Blobstore cluster size required for this pool
   optional uint32 cluster_size = 9;
+  // RAID information if the pool uses RAID storage
+  optional RaidInfo raid_info = 10;
 }
 
 // status of the pool
@@ -102,8 +104,8 @@ message GetPoolsRequest {
   }
 }
 
-// Pool configuration specifying the type and parameters
-message PoolConfig {
+// RAID configuration specifying the type and parameters
+message RaidConfig {
   oneof config {
     Raid0Config raid0 = 1;
   }
@@ -115,6 +117,14 @@ message Raid0Config {
   uint32 strip_size_kb = 1;
 }
 
+// RAID status information as reported by io-engine
+message RaidInfo {
+  // RAID level (e.g. "raid0", "raid1", "raid5")
+  string level = 1;
+  // RAID state (e.g. "online", "configuring", "offline")
+  string state = 2;
+}
+
 // Create Pool Request
 message CreatePoolRequest {
   // id of the io-engine instance
@@ -123,8 +133,8 @@ message CreatePoolRequest {
   string pool_id = 2;
   // disk device paths or URIs to be claimed by the pool
   repeated string disks = 3;
-  // pool configuration specifying the type and parameters
-  optional PoolConfig pool_config = 4;
+  // RAID configuration specifying the type and parameters
+  optional RaidConfig raid_config = 4;
   // labels to be set on the pool
   optional common.StringMapValue labels = 5;
   // Encryption parameters for this pool. Either as raw key params, OR a name to a Kubernetes

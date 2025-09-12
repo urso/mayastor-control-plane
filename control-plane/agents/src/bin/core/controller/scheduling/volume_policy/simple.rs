@@ -303,6 +303,7 @@ mod tests {
             committed: None,
             encrypted: false,
             cluster_size: POOL_BS_CLUSTER_SIZE_DEFAULT,
+            raid_info: None,
         };
         let replica = Replica::default();
         let pool = PoolWrapper::new(

@@ -11,7 +11,7 @@ use stor_port::{
     transport_api::ResourceKind,
     types::v0::{
         openapi::apis::IntoVec,
-        store::pool::{Encryption, EncryptionSecret, PoolConfig},
+        store::pool::{Encryption, EncryptionSecret, RaidConfig},
         transport::{
             self, ChildState, ChildStateReason, Nexus, NexusId, NexusNvmePreemption,
             NexusNvmfConfig, NexusStatus, NodeId, NvmeReservation, PoolState, PoolUuid, Protocol,
@@ -660,6 +660,13 @@ impl IoEngineToAgent for v1::pool::Pool {
             },
             encrypted: self.encrypted.unwrap_or_default(),
             cluster_size: self.cluster_size,
+            raid_info: self
+                .raid_info
+                .as_ref()
+                .map(|raid_info| transport::RaidInfo {
+                    level: raid_info.level.clone(),
+                    state: raid_info.state.clone(),
+                }),
         }
     }
 }
@@ -681,8 +688,8 @@ impl AgentToIoEngine for transport::CreatePool {
                 .map(|encryption| From::from(ExternalType(encryption))),
             // Pass RAID0 configuration to io-engine for multi-device pools
             // None = standard LVS pool, Some(Raid0) = RAID0 striped pool
-            pool_config: self
-                .pool_config
+            raid_config: self
+                .raid_config
                 .clone()
                 .map(|config| From::from(ExternalType(config))),
         }
@@ -712,8 +719,8 @@ impl AgentToIoEngine for transport::ImportPool {
                 .encryption
                 .clone()
                 .map(|encryption| From::from(ExternalType(encryption))),
-            pool_config: self
-                .pool_config
+            raid_config: self
+                .raid_config
                 .clone()
                 .map(|config| From::from(ExternalType(config))),
         }
@@ -916,17 +923,14 @@ impl From<ExternalType<EncryptionSecret>> for v1::pb::EncryptionSecret {
     }
 }
 
-impl From<ExternalType<PoolConfig>> for v1::pb::PoolConfig {
-    fn from(value: ExternalType<PoolConfig>) -> Self {
+impl From<ExternalType<RaidConfig>> for v1::pb::RaidConfig {
+    fn from(value: ExternalType<RaidConfig>) -> Self {
         match value.0 {
-            PoolConfig::Raid0 { strip_size_kb } => {
-                // No conversion needed - already in KB units throughout the stack
-                v1::pb::PoolConfig {
-                    config: Some(v1::pb::pool_config::Config::Raid0(v1::pb::Raid0Config {
-                        strip_size_kb,
-                    })),
-                }
-            }
+            RaidConfig::Raid0 { strip_size_kb } => v1::pb::RaidConfig {
+                config: Some(v1::pb::raid_config::Config::Raid0(v1::pb::Raid0Config {
+                    strip_size_kb,
+                })),
+            },
         }
     }
 }

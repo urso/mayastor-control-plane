@@ -93,6 +93,7 @@ impl IoEngineToAgent for v0::Pool {
             committed: None,
             encrypted: false,
             cluster_size: POOL_BS_CLUSTER_SIZE_DEFAULT,
+            raid_info: None, // v0 doesn't support RAID
         }
     }
 }

@@ -1,12 +1,36 @@
 use super::*;
 
 use crate::{
-    types::v0::store::pool::{Encryption, EncryptionSecret, PoolConfig, PoolLabel, PoolSpec},
+    types::v0::store::pool::{Encryption, EncryptionSecret, PoolLabel, PoolSpec, RaidConfig},
     IntoOption,
 };
 use serde::{Deserialize, Serialize};
 use std::{cmp::Ordering, collections::HashMap, fmt::Debug, ops::Deref};
 use strum_macros::{Display, EnumString};
+
+/// RAID status information as reported by io-engine.
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+pub struct RaidInfo {
+    /// RAID level (e.g. "raid0", "raid1", "raid5").
+    pub level: String,
+    /// RAID state (e.g. "online", "configuring", "offline").
+    pub state: String,
+}
+
+impl From<RaidInfo> for models::RaidInfo {
+    fn from(src: RaidInfo) -> Self {
+        Self::new(src.level, src.state)
+    }
+}
+
+impl From<models::RaidInfo> for RaidInfo {
+    fn from(src: models::RaidInfo) -> Self {
+        Self {
+            level: src.level,
+            state: src.state,
+        }
+    }
+}
 
 /// Pool Service
 /// Get all the pools from specific node or None for all nodes.
@@ -102,6 +126,8 @@ pub struct PoolState {
     pub encrypted: bool,
     /// Blobstore cluster size used for this pool.
     pub cluster_size: u32,
+    /// RAID information if the pool uses RAID storage.
+    pub raid_info: Option<RaidInfo>,
 }
 
 impl From<CtrlPoolState> for models::PoolState {
@@ -117,6 +143,7 @@ impl From<CtrlPoolState> for models::PoolState {
             src.committed,
             src.encrypted,
             Some(src.cluster_size as u64),
+            src.raid_info.map(Into::into),
         )
     }
 }
@@ -291,7 +318,7 @@ pub struct CreatePool {
     /// Disk device paths or URIs to be claimed by the pool.
     pub disks: Vec<PoolDeviceUri>,
     /// Pool configuration specifying the type and parameters.
-    pub pool_config: Option<PoolConfig>,
+    pub raid_config: Option<RaidConfig>,
     /// Labels to be set on the pool.
     pub labels: Option<PoolLabel>,
     /// Encryption parameters for this pool.
@@ -306,7 +333,7 @@ impl CreatePool {
         node: &NodeId,
         id: &PoolId,
         disks: &[PoolDeviceUri],
-        pool_config: &Option<PoolConfig>,
+        raid_config: &Option<RaidConfig>,
         labels: &Option<PoolLabel>,
         encryption: &Option<Encryption>,
         cluster_size: &Option<u32>,
@@ -315,7 +342,7 @@ impl CreatePool {
             node: node.clone(),
             id: id.clone(),
             disks: disks.to_vec(),
-            pool_config: pool_config.clone(),
+            raid_config: raid_config.clone(),
             labels: labels.clone(),
             encryption: encryption.clone(),
             cluster_size: *cluster_size,
@@ -336,7 +363,7 @@ pub struct ImportPool {
     /// The pool uuid if specified.
     pub uuid: Option<PoolUuid>,
     /// Pool configuration specifying the type and parameters.
-    pub pool_config: Option<PoolConfig>,
+    pub raid_config: Option<RaidConfig>,
     /// Encryption parameters for this pool.
     pub encryption: Option<Encryption>,
 }
@@ -347,7 +374,7 @@ impl ImportPool {
         node: &NodeId,
         id: &PoolId,
         disks: &[PoolDeviceUri],
-        pool_config: &Option<PoolConfig>,
+        raid_config: &Option<RaidConfig>,
         encryption: &Option<Encryption>,
     ) -> Self {
         Self {
@@ -355,7 +382,7 @@ impl ImportPool {
             id: id.clone(),
             disks: disks.to_vec(),
             uuid: None,
-            pool_config: pool_config.clone(),
+            raid_config: raid_config.clone(),
             encryption: encryption.clone(),
         }
     }

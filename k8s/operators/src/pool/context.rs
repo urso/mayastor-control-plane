@@ -277,7 +277,10 @@ impl ResourceContext {
             },
         };
 
-        let body = CreatePoolBody::new_all(self.spec.disks(), labels, encryption, None, None); // TODO: fill cluster_size and pool_config from DSP CR
+        let raid_config = self.spec.raid.as_ref().map(|r| r.clone().into());
+        let body =
+            CreatePoolBody::new_all(self.spec.disks(), labels, encryption, None, raid_config); // TODO: fill cluster_size from DSP CR
+
         match self
             .pools_api()
             .put_node_pool(&self.spec.node(), &self.name_any(), body)

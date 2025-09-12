@@ -102,7 +102,7 @@ impl From<&CreatePool> for PoolSpec {
             id: request.id.clone(),
             disks: request.disks.clone(),
             status: PoolSpecStatus::Creating,
-            pool_config: request.pool_config.clone(),
+            raid_config: request.raid_config.clone(),
             labels: request.labels.clone(),
             sequencer: OperationSequence::new(),
             operation: None,
@@ -120,7 +120,7 @@ impl From<&PoolSpec> for CreatePool {
             node: pool.node.clone(),
             id: pool.id.clone(),
             disks: pool.disks.clone(),
-            pool_config: pool.pool_config.clone(),
+            raid_config: pool.raid_config.clone(),
             labels: pool.labels.clone(),
             encryption: pool.encryption.clone(),
             cluster_size: Some(pool.cluster_size),
@@ -152,19 +152,18 @@ pub struct EncryptionSecret {
     pub name: String,
 }
 
-/// Pool configuration specifying the type and parameters.
+/// RAID configuration specifying the type and parameters.
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
-pub enum PoolConfig {
+pub enum RaidConfig {
     /// RAID0 configuration with strip size in KB.
     Raid0 { strip_size_kb: u32 },
-    // Future: Raid1 { mirror_policy: MirrorPolicy },
 }
 
-impl PoolConfig {
+impl RaidConfig {
     /// Validate pool configuration parameters.
     pub fn validate(&self, disk_count: usize) -> Result<(), PoolValidationError> {
         match self {
-            PoolConfig::Raid0 { strip_size_kb } => {
+            RaidConfig::Raid0 { strip_size_kb } => {
                 if disk_count < 2 {
                     return Err(PoolValidationError::InvalidDiskCount {
                         disk_count,
@@ -192,7 +191,7 @@ impl PoolConfig {
     /// Check if this configuration requires multiple disks.
     pub fn requires_multiple_disks(&self) -> bool {
         match self {
-            PoolConfig::Raid0 { .. } => true,
+            RaidConfig::Raid0 { .. } => true,
         }
     }
 }
@@ -210,7 +209,7 @@ pub struct PoolSpec {
     pub status: PoolSpecStatus,
     /// pool configuration specifying the type and parameters
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub pool_config: Option<PoolConfig>,
+    pub raid_config: Option<RaidConfig>,
     /// labels to be set on the pool
     #[serde(skip_serializing_if = "Option::is_none")]
     pub labels: Option<PoolLabel>,
@@ -304,7 +303,7 @@ impl PoolSpec {
     /// Validate pool specification.
     pub fn validate(&self) -> Result<(), PoolValidationError> {
         // Multi-device pools require explicit pool configuration
-        if self.disks.len() > 1 && self.pool_config.is_none() {
+        if self.disks.len() > 1 && self.raid_config.is_none() {
             return Err(PoolValidationError::InvalidDiskCount {
                 disk_count: self.disks.len(),
                 minimum_required: 1,
@@ -313,7 +312,7 @@ impl PoolSpec {
         }
 
         // Validate pool configuration if present
-        if let Some(config) = &self.pool_config {
+        if let Some(config) = &self.raid_config {
             config.validate(self.disks.len())?;
         }
 
@@ -377,7 +376,7 @@ impl From<&PoolSpec> for ImportPool {
             id: value.id.clone(),
             disks: value.disks.clone(),
             uuid: None,
-            pool_config: value.pool_config.clone(),
+            raid_config: value.raid_config.clone(),
             encryption: value.encryption.clone(),
         }
     }
@@ -412,7 +411,7 @@ impl From<PoolSpec> for models::PoolSpec {
             src.status,
             encryption,
             src.cordon_drain.into_opt(),
-            src.pool_config.map(Into::into),
+            src.raid_config.map(Into::into),
         )
     }
 }
@@ -611,6 +610,15 @@ impl From<&PoolSpec> for transport::PoolState {
             committed: None,
             encrypted: pool.encryption.is_some(),
             cluster_size: pool.cluster_size,
+            raid_info: pool
+                .raid_config
+                .as_ref()
+                .map(|raid_config| match raid_config {
+                    RaidConfig::Raid0 { .. } => transport::RaidInfo {
+                        level: "raid0".to_string(),
+                        state: "unknown".to_string(),
+                    },
+                }),
         }
     }
 }
@@ -743,14 +751,23 @@ impl From<CordonDrainState> for models::PoolCordonDrain {
     }
 }
 
-impl From<PoolConfig> for models::PoolConfig {
-    fn from(src: PoolConfig) -> Self {
+impl From<RaidConfig> for models::RaidConfig {
+    fn from(src: RaidConfig) -> Self {
         match src {
-            PoolConfig::Raid0 { strip_size_kb } => {
-                // No conversion needed - already in KB units throughout the stack
-                let raid0_config = models::Raid0Config::new(strip_size_kb as i32);
-                models::PoolConfig::new_all(Some(raid0_config))
+            RaidConfig::Raid0 { strip_size_kb } => {
+                let raid0_config = models::Raid0Config::new(strip_size_kb);
+                models::RaidConfig::raid0(raid0_config)
             }
+        }
+    }
+}
+
+impl From<models::RaidConfig> for RaidConfig {
+    fn from(src: models::RaidConfig) -> Self {
+        match src {
+            models::RaidConfig::raid0(raid0_config) => RaidConfig::Raid0 {
+                strip_size_kb: raid0_config.strip_size_kb,
+            },
         }
     }
 }
