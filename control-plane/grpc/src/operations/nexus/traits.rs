@@ -24,7 +24,7 @@ use stor_port::{
         transport::{
             AddNexusChild, Child, ChildState, ChildStateReason, ChildUri, CreateNexus,
             DestroyNexus, Filter, GetRebuildRecord, HostNqn, Nexus, NexusId, NexusNvmePreemption,
-            NexusNvmfConfig, NexusShareProtocol, NexusStatus, NodeId, NvmeReservation,
+            NexusNvmfConfig, NexusQos, NexusShareProtocol, NexusStatus, NodeId, NvmeReservation,
             NvmfControllerIdRange, RebuildHistory, RebuildJobState, RebuildRecord,
             RemoveNexusChild, ReplicaId, ShareNexus, UnshareNexus, VolumeId,
         },
@@ -127,6 +127,12 @@ impl TryFrom<nexus::Nexus> for Nexus {
                 }
             },
             allowed_hosts: vec![],
+            qos: nexus_grpc_type.qos.map(|qos| NexusQos {
+                iops_limit: qos.iops_limit,
+                bandwidth_limit: qos.bandwidth_limit,
+                read_bandwidth_limit: qos.read_bandwidth_limit,
+                write_bandwidth_limit: qos.write_bandwidth_limit,
+            }),
         };
         Ok(nexus)
     }
@@ -150,6 +156,12 @@ impl From<Nexus> for nexus::Nexus {
             rebuilds: nexus.rebuilds,
             share: share as i32,
             status: status as i32,
+            qos: nexus.qos.map(|qos| nexus::NexusQos {
+                iops_limit: qos.iops_limit,
+                bandwidth_limit: qos.bandwidth_limit,
+                read_bandwidth_limit: qos.read_bandwidth_limit,
+                write_bandwidth_limit: qos.write_bandwidth_limit,
+            }),
         }
     }
 }

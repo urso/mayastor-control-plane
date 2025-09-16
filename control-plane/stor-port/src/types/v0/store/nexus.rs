@@ -428,6 +428,7 @@ impl From<&NexusSpec> for transport::Nexus {
             rebuilds: 0,
             share: nexus.share,
             allowed_hosts: vec![],
+            qos: None,
         }
     }
 }

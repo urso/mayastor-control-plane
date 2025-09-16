@@ -11,6 +11,20 @@ use serde::{Deserialize, Serialize};
 use std::{convert::TryFrom, fmt::Debug, ops::RangeInclusive, time::SystemTime};
 use strum_macros::{Display, EnumString};
 
+/// QoS settings for a nexus
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct NexusQos {
+    /// QoS IOPS limit per second
+    pub iops_limit: Option<u32>,
+    /// QoS read/write bandwidth limit in MB/s
+    pub bandwidth_limit: Option<u32>,
+    /// QoS read bandwidth limit in MB/s
+    pub read_bandwidth_limit: Option<u32>,
+    /// QoS write bandwidth limit in MB/s
+    pub write_bandwidth_limit: Option<u32>,
+}
+
 /// Volume Nexuses
 ///
 /// Get all the nexuses with a filter selection
@@ -45,6 +59,9 @@ pub struct Nexus {
     pub share: Protocol,
     /// host nqn's allowed to connect to the target.
     pub allowed_hosts: Vec<HostNqn>,
+    /// QoS settings from SPDK
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub qos: Option<NexusQos>,
 }
 impl Nexus {
     /// Check if the nexus contains the provided `ChildUri`.

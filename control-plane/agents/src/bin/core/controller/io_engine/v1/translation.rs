@@ -374,6 +374,7 @@ impl TryIoEngineToAgent for v1::nexus::Nexus {
                         .unwrap_or(transport::HostNqn::Invalid { nqn: n.to_string() })
                 })
                 .collect(),
+            qos: None,
         })
     }
 }

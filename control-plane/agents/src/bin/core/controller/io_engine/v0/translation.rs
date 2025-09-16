@@ -161,6 +161,7 @@ impl TryIoEngineToAgent for v0::NexusV2 {
                         .unwrap_or(transport::HostNqn::Invalid { nqn: n.to_string() })
                 })
                 .collect(),
+            qos: None,
         })
     }
 }
@@ -190,6 +191,7 @@ impl TryIoEngineToAgent for v0::Nexus {
                         .unwrap_or(transport::HostNqn::Invalid { nqn: n.to_string() })
                 })
                 .collect(),
+            qos: None,
         })
     }
 }

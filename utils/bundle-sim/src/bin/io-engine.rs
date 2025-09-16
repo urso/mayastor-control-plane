@@ -174,6 +174,7 @@ impl IoEngine {
                     rebuilds: state.rebuilds,
                     ana_state: 0,
                     allowed_hosts: state.allowed_hosts.into_iter().map(Into::into).collect(),
+                    qos: None,
                 };
                 if let Some(node) = io_engine.sims.get_mut(state.node.as_str()) {
                     node.nexuses.push(nexus);

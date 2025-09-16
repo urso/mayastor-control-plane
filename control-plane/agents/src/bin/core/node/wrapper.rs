@@ -2,9 +2,9 @@ use crate::{
     controller::{
         io_engine::{
             types::{CreateNexusSnapshot, CreateNexusSnapshotResp},
-            GrpcClient, GrpcClientLocked, GrpcContext, HostApi, NexusApi, NexusChildActionApi,
-            NexusChildApi, NexusShareApi, NexusSnapshotApi, PoolApi, ReplicaApi,
-            ReplicaSnapshotApi,
+            GrpcClient, GrpcClientLocked, GrpcContext, HostApi, JsonGrpcClient, NexusApi,
+            NexusChildActionApi, NexusChildApi, NexusShareApi, NexusSnapshotApi, PoolApi,
+            ReplicaApi, ReplicaSnapshotApi,
         },
         registry::Registry,
         resources::ResourceUid,
@@ -319,6 +319,27 @@ impl NodeWrapper {
         } else {
             Err(SvcError::InvalidApiVersion { api_version: None })
         }
+    }
+
+    /// Create a JsonGrpc client for calling SPDK JsonRpc methods.
+    /// This method only works with V1 API nodes.
+    pub(crate) async fn json_grpc_client(
+        &self,
+        timeout: Option<NodeCommsTimeout>,
+    ) -> Result<JsonGrpcClient, SvcError> {
+        // JsonRpc is only supported in V1 API
+        // TODO: Shall we support V0 as well?
+        if self.latest_api_version() != Some(ApiVersion::V1) {
+            return Err(SvcError::InvalidApiVersion {
+                api_version: self.latest_api_version(),
+            });
+        }
+
+        let context = timeout
+            .map(|timeout| self.grpc_context_timeout(timeout))
+            .unwrap_or_else(|| self.grpc_context())?;
+
+        JsonGrpcClient::new(&context).await
     }
 
     /// Get the `NodeStateFetcher` to fetch information from the data-plane.

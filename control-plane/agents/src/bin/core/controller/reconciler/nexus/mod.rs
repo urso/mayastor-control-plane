@@ -4,7 +4,7 @@ mod re_shutdown;
 
 use crate::{
     controller::{
-        io_engine::{NexusApi, NexusChildActionApi},
+        io_engine::{jsonrpc::BdevSetQosLimitRequest, NexusApi, NexusChildActionApi},
         policies::rebuild_policies::RuleSet,
         reconciler::{ReCreate, Reconciler},
         resources::{
@@ -32,6 +32,7 @@ use stor_port::{
         store::{
             nexus::{NexusSpec, ReplicaUri},
             nexus_child::NexusChild,
+            volume::VolumeQos,
             volume::VolumeSpec,
         },
         transport::{
@@ -491,6 +492,20 @@ pub(super) async fn missing_nexus_recreate(
         match node.create_nexus(&CreateNexus::from(&nexus)).await {
             Ok(_) => {
                 nexus.info_span(|| tracing::info!("Nexus successfully recreated"));
+
+                // Apply QoS settings if volume has QoS properties
+                if let Some(volume_id) = &nexus.owner {
+                    if let Ok(volume) = context.registry().volume(volume_id).await {
+                        let volume_spec = volume.spec();
+                        if volume_spec.qos().is_configured() {
+                            match apply_qos_settings(node.clone(), &nexus.name, volume_spec.qos()).await {
+                                Ok(_) => nexus.info_span(|| tracing::info!("QoS settings applied successfully")),
+                                Err(error) => nexus.warn_span(|| tracing::warn!(error=%error, "Failed to apply QoS settings, continuing without QoS")),
+                            }
+                        }
+                    }
+                }
+
                 PollResult::Ok(PollerState::Idle)
             }
             Err(error) => {
@@ -659,4 +674,125 @@ pub(super) async fn fixup_nexus_size(
         .await?;
 
     PollResult::Ok(PollerState::Idle)
+}
+
+/// Fixup the nexus QoS settings if they do not match what the VolumeSpec specifies
+#[tracing::instrument(skip(nexus, volume, context), level = "debug", fields(nexus.uuid = %nexus.uuid(), request.reconcile = true))]
+pub(super) async fn fixup_nexus_qos(
+    nexus: &mut OperationGuardArc<NexusSpec>,
+    volume: &OperationGuardArc<VolumeSpec>,
+    context: &PollContext,
+) -> PollResult {
+    let nexus_uuid = nexus.uuid();
+    let Ok(nexus_state) = context.registry().nexus(nexus_uuid).await else {
+        return PollResult::Ok(PollerState::Idle);
+    };
+
+    // QoS operations require nexus to be serving I/O
+    if !nexus_state.io_online() {
+        return PollResult::Ok(PollerState::Idle);
+    }
+
+    let volume_spec = volume.as_ref();
+    let desired_qos = &volume_spec.qos;
+
+    // Convert for type-safe comparison
+    let current_qos_as_volume = nexus_state
+        .qos
+        .as_ref()
+        .map(|qos| VolumeQos {
+            iops_limit: qos.iops_limit,
+            bandwidth_limit: qos.bandwidth_limit,
+            read_bandwidth_limit: qos.read_bandwidth_limit,
+            write_bandwidth_limit: qos.write_bandwidth_limit,
+        })
+        .unwrap_or_default();
+
+    if !desired_qos.is_configured() && !current_qos_as_volume.is_configured() {
+        return PollResult::Ok(PollerState::Idle);
+    }
+
+    if desired_qos == &current_qos_as_volume {
+        return PollResult::Ok(PollerState::Idle);
+    }
+
+    let nexus_spec = nexus.lock().clone();
+    nexus_spec.warn_span(|| {
+        tracing::warn!(
+            "Attempting to fix QoS drift. Current: {:?}, Desired: {:?}",
+            current_qos_as_volume,
+            desired_qos
+        )
+    });
+
+    let node = context.registry().node_wrapper(&nexus_state.node).await?;
+
+    let qos_to_apply = if desired_qos.is_configured() {
+        desired_qos
+    } else {
+        &VolumeQos::default()
+    };
+
+    match apply_qos_settings(node, &nexus_state.name, qos_to_apply).await {
+        Ok(_) => {
+            if desired_qos.is_configured() {
+                nexus_spec.info_span(|| tracing::info!("QoS settings applied successfully"));
+            } else {
+                nexus_spec
+                    .info_span(|| tracing::info!("QoS settings removed successfully (set to 0)"));
+            }
+        }
+        Err(error) => {
+            nexus_spec.error_span(|| {
+                tracing::error!(error = %error, "Failed to apply QoS settings, will retry on next reconciliation cycle");
+            });
+            // Don't block other reconciliation operations - retry on next cycle
+        }
+    }
+
+    PollResult::Ok(PollerState::Idle)
+}
+
+/// Apply QoS settings to a nexus via JsonGrpc SPDK calls.
+async fn apply_qos_settings(
+    node: Arc<RwLock<NodeWrapper>>,
+    nexus_name: &str,
+    qos: &stor_port::types::v0::store::volume::VolumeQos,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let json_client = {
+        let node_guard = node.read().await;
+        node_guard.json_grpc_client(None).await?
+    };
+
+    // Always send explicit values: SPDK won't update fields we omit,
+    // preventing QoS clearing. 0 maps to SPDK_BDEV_QOS_LIMIT_NOT_DEFINED.
+    let qos_request = BdevSetQosLimitRequest {
+        name: nexus_name.to_string(),
+        rw_ios_per_sec: Some(qos.iops_limit.unwrap_or(0)),
+        rw_mbytes_per_sec: Some(qos.bandwidth_limit.unwrap_or(0)),
+        r_mbytes_per_sec: Some(qos.read_bandwidth_limit.unwrap_or(0)),
+        w_mbytes_per_sec: Some(qos.write_bandwidth_limit.unwrap_or(0)),
+    };
+
+    match json_client.call(&qos_request).await {
+        Ok(_) => {
+            tracing::info!(
+                nexus=%nexus_name,
+                iops_limit=?qos.iops_limit,
+                bandwidth_limit=?qos.bandwidth_limit,
+                read_bandwidth_limit=?qos.read_bandwidth_limit,
+                write_bandwidth_limit=?qos.write_bandwidth_limit,
+                "Applied QoS settings via JsonGrpc"
+            );
+            Ok(())
+        }
+        Err(error) => {
+            tracing::warn!(
+                nexus=%nexus_name,
+                %error,
+                "Failed to apply QoS settings via JsonGrpc"
+            );
+            Err(format!("JsonGrpc call failed: {error}").into())
+        }
+    }
 }

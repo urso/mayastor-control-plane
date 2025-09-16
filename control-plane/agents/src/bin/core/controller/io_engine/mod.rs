@@ -1,4 +1,5 @@
 pub(crate) mod client;
+pub(crate) mod jsonrpc;
 /// Message translation to agent types from rpc v0,v1 types.
 mod translation;
 pub(crate) mod types;
@@ -6,6 +7,7 @@ pub(crate) mod v0;
 pub(crate) mod v1;
 
 pub(crate) use client::*;
+pub(crate) use jsonrpc::JsonGrpcClient;
 
 use crate::controller::io_engine::types::{
     CreateNexusSnapshot, CreateNexusSnapshotResp, CreateSnapRebuild, DestroySnapRebuild,

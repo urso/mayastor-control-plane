@@ -7,6 +7,15 @@ import "google/protobuf/timestamp.proto";
 
 package v1.nexus;
 
+// QoS settings for a nexus device (matches VolumeQos field names)
+message NexusQos {
+  // Current QoS settings (what's actually applied to the nexus)
+  optional uint32 iops_limit = 1;              // IOPS limit per second
+  optional uint32 bandwidth_limit = 2;         // Read/Write bandwidth limit in MB/s
+  optional uint32 read_bandwidth_limit = 3;    // Read-only bandwidth limit in MB/s
+  optional uint32 write_bandwidth_limit = 4;   // Write-only bandwidth limit in MB/s
+}
+
 message Nexus {
   // id of the io-engine instance
   string node_id = 1;
@@ -27,6 +36,8 @@ message Nexus {
   uint32 rebuilds = 8;
   // protocol used for exposing the nexus
   common.Protocol share = 9;
+  // Current QoS settings from SPDK
+  optional NexusQos qos = 10;
 }
 
 // Multiple nexus
