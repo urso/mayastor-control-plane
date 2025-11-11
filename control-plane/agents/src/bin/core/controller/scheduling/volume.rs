@@ -5,7 +5,10 @@ use crate::controller::{
         affinity_group::{get_pool_ag_replica_count, get_restricted_nodes},
         pool::replica_rebuildable,
         resources::{ChildItem, PoolItem, PoolItemLister, ReplicaItem},
-        volume_policy::{node::NodeFilters, SimplePolicy, ThickPolicy},
+        volume_policy::{
+            node::{volume_node_spread_labels, volume_node_spread_labels_x, NodeFilters},
+            SimplePolicy, ThickPolicy,
+        },
         AddReplicaFilters, AddReplicaSorters, ChildSorters, ResourceData, ResourceFilter,
     },
     wrapper::PoolWrapper,
@@ -13,17 +16,18 @@ use crate::controller::{
 use agents::errors::SvcError;
 use stor_port::types::v0::{
     store::{
-        nexus::NexusSpec, nexus_persistence::NexusInfo, snapshots::replica::ReplicaSnapshot,
-        volume::VolumeSpec,
+        nexus::NexusSpec, nexus_persistence::NexusInfo, replica::ReplicaSpec,
+        snapshots::replica::ReplicaSnapshot, volume::VolumeSpec,
     },
     transport::{NodeId, PoolId, VolumeState},
 };
 
-use crate::controller::scheduling::ResourceExcReason;
+use crate::controller::scheduling::{affinity_group::ag_restricted_nodes, ResourceExcReason};
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     ops::Deref,
 };
+use stor_port::types::v0::store::volume::AffinityGroupSpec;
 
 /// Move replica to another pool.
 #[derive(Default, Clone)]
@@ -77,6 +81,7 @@ pub(crate) struct GetSuitablePoolsContext {
     move_repl: Option<MoveReplica>,
     snap_repl: bool,
     ag_restricted_nodes: Option<Vec<NodeId>>,
+    used_spread_labels: std::collections::HashMap<String, Vec<String>>,
 }
 impl GetSuitablePoolsContext {
     /// Get the registry.
@@ -110,6 +115,9 @@ impl GetSuitablePoolsContext {
         let max_cap_allowed = allowed_commit_percent * pool.capacity;
         (self.size + pool.commitment()) * 100 < max_cap_allowed
     }
+    pub(crate) fn spread_labels(&self) -> &std::collections::HashMap<String, Vec<String>> {
+        &self.used_spread_labels
+    }
 }
 
 impl Deref for GetSuitablePoolsContext {
@@ -139,6 +147,14 @@ impl AddVolumeReplica {
     // May return None if the replica nodes are offline.
     async fn allocated_bytes(registry: &Registry, volume: &VolumeSpec) -> Option<u64> {
         let replicas = registry.specs().volume_replicas(&volume.uuid);
+        Self::allocated_bytes_repl(registry, &replicas).await
+    }
+    // Return max allocated bytes from volume replicas.
+    // May return None if the replica nodes are offline.
+    async fn allocated_bytes_repl(
+        registry: &Registry,
+        replicas: &Vec<ResourceMutex<ReplicaSpec>>,
+    ) -> Option<u64> {
         if replicas.is_empty() {
             return Some(0);
         }
@@ -151,12 +167,16 @@ impl AddVolumeReplica {
                 }
             }
         }
-        used_bytes.iter().max().cloned()
+        used_bytes.into_iter().max()
     }
     async fn builder(request: GetSuitablePools, registry: &Registry) -> Self {
         let volume_spec = request.spec;
 
-        let allocated_bytes = Self::allocated_bytes(registry, &volume_spec).await;
+        let replicas = registry.specs().volume_replicas(&volume_spec.uuid);
+        // the spread keys and the currently used values which cannot be reused by new replicas
+        let exclude_labels = volume_node_spread_labels(&volume_spec, registry, &replicas);
+
+        let allocated_bytes = Self::allocated_bytes_repl(registry, &replicas).await;
 
         let mut ag_restricted_nodes: Option<Vec<NodeId>> = None;
         let mut pool_ag_replica_count_map: Option<HashMap<PoolId, u64>> = None;
@@ -184,6 +204,7 @@ impl AddVolumeReplica {
                     move_repl: request.move_repl,
                     snap_repl: false,
                     ag_restricted_nodes,
+                    used_spread_labels: exclude_labels,
                 },
                 PoolItemLister::list(registry, &pool_ag_replica_count_map).await,
             ),
@@ -253,6 +274,20 @@ impl GetChildForRemoval {
     }
 }
 
+/// Affinity Group useful information when scaling down.
+#[derive(Clone)]
+pub(crate) struct AffinityGroupRmCtx {
+    _group: AffinityGroupSpec,
+    pool_repl_cnt: HashMap<PoolId, u64>,
+    restricted_nodes: HashSet<NodeId>,
+}
+impl AffinityGroupRmCtx {
+    /// Get the Affinity Group restricted nodes.
+    pub(crate) fn restricted_nodes(&self) -> &HashSet<NodeId> {
+        &self.restricted_nodes
+    }
+}
+
 /// Used to filter nexus children in order to choose the best candidates for removal
 /// when the volume's replica count is being reduced.
 #[derive(Clone)]
@@ -262,6 +297,7 @@ pub(crate) struct GetChildForRemovalContext {
     state: VolumeState,
     nexus_info: Option<NexusInfo>,
     unused_only: bool,
+    affinity_group: Option<AffinityGroupRmCtx>,
 }
 impl std::fmt::Debug for GetChildForRemovalContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -275,7 +311,11 @@ impl std::fmt::Debug for GetChildForRemovalContext {
 }
 
 impl GetChildForRemovalContext {
-    async fn new(registry: &Registry, request: &GetChildForRemoval) -> Result<Self, SvcError> {
+    async fn new(
+        registry: &Registry,
+        request: &GetChildForRemoval,
+        affinity_group: Option<AffinityGroupSpec>,
+    ) -> Result<Self, SvcError> {
         let nexus_info = registry
             .nexus_info(
                 Some(&request.spec.uuid),
@@ -291,57 +331,63 @@ impl GetChildForRemovalContext {
             state: request.state.clone(),
             nexus_info,
             unused_only: request.unused_only,
+            affinity_group: match affinity_group {
+                None => None,
+                Some(group) => Some(AffinityGroupRmCtx {
+                    pool_repl_cnt: get_pool_ag_replica_count(&group, registry).await,
+                    restricted_nodes: ag_restricted_nodes(&group, registry).await,
+                    _group: group,
+                }),
+            },
         })
     }
 
-    async fn list(&self, pool_ag_rep: &Option<HashMap<PoolId, u64>>) -> Vec<ReplicaItem> {
-        let replicas = self.registry.specs().volume_replicas(&self.spec.uuid);
+    async fn list(&self) -> Vec<ReplicaItem> {
+        let pool_ag_rep = self.affinity_group.as_ref().map(|g| &g.pool_repl_cnt);
+        let replicas = self.registry.specs().volume_replicas_cln(&self.spec.uuid);
         let nexus = self.registry.specs().volume_target_nexus_rsc(&self.spec);
-        let replicas = replicas.iter().map(|r| r.lock().clone());
+        let used_node_spread =
+            volume_node_spread_labels_x(&self.spec, &self.registry, replicas.iter());
 
         let replica_states = self.registry.replicas().await;
         replicas
+            .into_iter()
             .map(|replica_spec| {
                 let replica_node_spec = self.registry.specs().replica_node_spec(&replica_spec.uuid);
                 let ag_rep_count = pool_ag_rep
                     .as_ref()
                     .and_then(|map| map.get(replica_spec.pool_name()).cloned());
+                let replica_state = replica_states.iter().find(|r| r.uuid == replica_spec.uuid);
                 ReplicaItem::new(
                     replica_spec.clone(),
-                    replica_states.iter().find(|r| r.uuid == replica_spec.uuid),
-                    replica_states
-                        .iter()
-                        .find(|replica_state| replica_state.uuid == replica_spec.uuid)
-                        .and_then(|replica_state| {
-                            nexus.as_ref().and_then(|nexus_spec| {
-                                nexus_spec
-                                    .lock()
-                                    .children
-                                    .iter()
-                                    .find(|child| child.uri() == replica_state.uri)
-                                    .map(|child| child.uri())
-                            })
-                        }),
-                    replica_states
-                        .iter()
-                        .find(|replica_state| replica_state.uuid == replica_spec.uuid)
-                        .and_then(|replica_state| {
-                            self.state.target.as_ref().and_then(|nexus_state| {
-                                nexus_state
-                                    .children
-                                    .iter()
-                                    .find(|child| child.uri.as_str() == replica_state.uri)
-                                    .cloned()
-                            })
-                        }),
+                    replica_state,
+                    replica_state.and_then(|replica_state| {
+                        nexus.as_ref().and_then(|nexus_spec| {
+                            nexus_spec
+                                .lock()
+                                .children
+                                .iter()
+                                .find(|child| child.uri() == replica_state.uri)
+                                .map(|child| child.uri())
+                        })
+                    }),
+                    replica_state.and_then(|replica_state| {
+                        self.state.target.as_ref().and_then(|nexus_state| {
+                            nexus_state
+                                .children
+                                .iter()
+                                .find(|child| child.uri.as_str() == replica_state.uri)
+                                .cloned()
+                        })
+                    }),
                     nexus.as_ref().and_then(|nexus_spec| {
                         nexus_spec
                             .lock()
                             .children
                             .iter()
                             .find(|child| {
-                                child.as_replica().map(|uri| uri.uuid().clone())
-                                    == Some(replica_spec.uuid.clone())
+                                child.as_replica().as_ref().map(|uri| uri.uuid())
+                                    == Some(&replica_spec.uuid)
                             })
                             .cloned()
                     }),
@@ -355,12 +401,8 @@ impl GetChildForRemovalContext {
                     ag_rep_count,
                     replica_node_spec,
                 )
-                .with_node_topology({
-                    Some(NodeFilters::topology_replica(
-                        &self.spec,
-                        &self.registry,
-                        replica_spec.pool_name(),
-                    ))
+                .with_node_topology(|node_spec| {
+                    NodeFilters::topology_replica_removal(&self.spec, node_spec, &used_node_spread)
                 })
                 .with_pool_topology({
                     use crate::controller::scheduling::volume_policy::pool::PoolBaseFilters;
@@ -373,19 +415,22 @@ impl GetChildForRemovalContext {
             })
             .collect::<Vec<_>>()
     }
+
+    /// Get the volume's affinity group.
+    pub(crate) fn affinity_group(&self) -> Option<&AffinityGroupRmCtx> {
+        self.affinity_group.as_ref()
+    }
 }
 
 impl DecreaseVolumeReplica {
     async fn builder(request: &GetChildForRemoval, registry: &Registry) -> Result<Self, SvcError> {
-        let mut pool_ag_replica_count_map: Option<HashMap<PoolId, u64>> = None;
-        if let Some(affinity_group) = &request.spec.affinity_group {
-            let affinity_group_spec = registry.specs().affinity_group_spec(affinity_group.id())?;
-            pool_ag_replica_count_map =
-                Some(get_pool_ag_replica_count(&affinity_group_spec, registry).await);
-        }
+        let affinity_group = request.spec.affinity_group.as_ref();
+        let affinity_group = affinity_group
+            .map(|g| registry.specs().affinity_group_spec(g.id()))
+            .transpose()?;
 
-        let context = GetChildForRemovalContext::new(registry, request).await?;
-        let list = context.list(&pool_ag_replica_count_map).await;
+        let context = GetChildForRemovalContext::new(registry, request, affinity_group).await?;
+        let list = context.list().await;
         Ok(Self {
             data: ResourceData::new(context, list),
         })
@@ -395,9 +440,8 @@ impl DecreaseVolumeReplica {
         request: &GetChildForRemoval,
         registry: &Registry,
     ) -> Result<Self, SvcError> {
-        Ok(Self::builder(request, registry)
-            .await?
-            .sort(ChildSorters::sort))
+        let remover = Self::builder(request, registry).await?;
+        Ok(remover.sort_ctx(ChildSorters::sort))
     }
     /// Get the `ReplicaRemovalCandidates` for this request, which splits the candidates into
     /// healthy and unhealthy candidates.
@@ -436,6 +480,24 @@ impl ReplicaRemovalCandidates {
             None
         }
     }
+    fn ag_restricted_nodes(&self) -> Option<&HashSet<NodeId>> {
+        let ag = self.context.affinity_group.as_ref()?;
+        if ag.restricted_nodes.is_empty() {
+            return None;
+        }
+        //     N
+        // R 1 2 3
+        // 1 x x
+        // 2 x x
+        // 3 x x x
+        // todo: In this case, shouldn't we block removal or r3n3 ?
+        if self.context.spec.num_replicas > 2 {
+            // for now, we only restrict from 2->1
+            return None;
+        }
+        Some(&ag.restricted_nodes)
+    }
+
     /// Get the next unhealthy candidates (any is a good fit).
     fn next_unhealthy(&mut self) -> Option<ReplicaItem> {
         self.unhealthy.pop()
@@ -444,6 +506,46 @@ impl ReplicaRemovalCandidates {
     /// Unhealthy replicas are removed before healthy replicas.
     pub(crate) fn next(&mut self) -> Option<ReplicaItem> {
         self.next_unhealthy().or_else(|| self.next_healthy())
+    }
+    /// Get the next removal candidate.
+    /// Unhealthy replicas are removed before healthy replicas.
+    /// Use when scaling down the volume where we need to guard against restricted node usage.
+    pub(crate) fn next_down(&mut self) -> Option<Option<ReplicaItem>> {
+        // we don't want to leave place 1-r affinity volumes in the same node (potentially),
+        // so we should check whether we have other replicas available
+        let mut replicas_in_unrestricted_nodes = false;
+
+        let candidate = self.next_unhealthy().or_else(|| self.next_healthy())?;
+
+        let Some(restricted_nodes) = self.ag_restricted_nodes() else {
+            // no affinity groups, just remove the best candidate
+            return Some(Some(candidate));
+        };
+        // todo: still need a better way of controlling the priority of candidates when
+        //  scaling from X -> X-1, where X > 2
+        //  also we can block scale down to 1, if we don't have sufficient distinct nodes
+        //  to place all the other volume replicas
+
+        tracing::debug!("Restricted Affinity Group Nodes: {restricted_nodes:?}");
+        tracing::debug!("Candidate for removal: {}", candidate.spec().uuid);
+
+        for repl in &self.healthy {
+            let Some(node) = repl.node_spec() else {
+                continue;
+            };
+            if restricted_nodes.get(node.id()).is_none()
+                && (repl.valid_topology() || !candidate.valid_topology())
+            {
+                replicas_in_unrestricted_nodes = true;
+                break;
+            }
+        }
+
+        if replicas_in_unrestricted_nodes {
+            Some(Some(candidate))
+        } else {
+            Some(None)
+        }
     }
 
     fn new(context: GetChildForRemovalContext, items: Vec<ReplicaItem>) -> Self {
@@ -676,6 +778,7 @@ impl SnapshotVolumeReplica {
                     move_repl: None,
                     snap_repl: true,
                     ag_restricted_nodes: None,
+                    used_spread_labels: Default::default(),
                 },
                 PoolItemLister::list_for_snaps(registry, items).await,
             ),
@@ -749,6 +852,7 @@ impl CloneVolumeSnapshot {
                     move_repl: None,
                     snap_repl: false,
                     ag_restricted_nodes: None,
+                    used_spread_labels: Default::default(),
                 },
                 PoolItemLister::list_for_clones(registry, snapshots).await,
             ),
