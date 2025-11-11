@@ -1,11 +1,13 @@
 name: Submodule Update
+# Disabled for this fork - requires ORG_CI_GITHUB bot token
 on:
   workflow_dispatch:
-    inputs:
-      submodules:
-        description: 'Override modules to update via comma-separated list of names'
-        required: false
-        default: ''
+# Original configuration preserved but requires secrets.ORG_CI_GITHUB to function
+#    inputs:
+#      submodules:
+#        description: 'Override modules to update via comma-separated list of names'
+#        required: false
+#        default: ''
 
 jobs:
   submodule:
@@ -18,6 +20,7 @@ jobs:
         with:
           fetch-depth: 0
           submodules: recursive
+          token: ${{ secrets.GIT_TOKEN }}
 
       - name: Update submodules
         run: ./utils/dependencies/scripts/git/submodule-branches.sh -u -m "${{ github.event.inputs.submodules }}"
@@ -33,7 +36,7 @@ jobs:
           signoff: true
           delete-branch: true
           branch: update-submodules/${{ github.ref_name }}
-          token: ${{ secrets.ORG_CI_GITHUB }}
+          token: ${{ secrets.GIT_TOKEN }}
 
       - name: Approve Pull Request by CI Bot 1
         if: ${{ steps.cpr.outputs.pull-request-number }}

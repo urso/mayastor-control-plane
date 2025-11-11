@@ -19,6 +19,7 @@ jobs:
         with:
           fetch-depth: 0
           submodules: 'recursive'
+          token: ${{ secrets.GIT_TOKEN }}
 
       - run: echo "CI_REPORT_START_DATE=$(date +"%Y-%m-%d %H:%M:%S")" >> $GITHUB_ENV
 

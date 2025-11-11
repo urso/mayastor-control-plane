@@ -5,6 +5,7 @@ on:
 jobs:
   ci:
     uses: ./.github/workflows/pr-ci.yml
+    secrets: inherit
   nightly-ci:
     if: ${{ success() }}
     needs:

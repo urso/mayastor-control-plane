@@ -3,7 +3,7 @@ name: Doc Issue
 about: Use this issue type to report documentation issues or errors, or to propose new topics or content.
 title: '[Doc Source]: [Issue Summary]'
 labels: documentation
-assignees: GlennBullingham
+assignees: ''
 
 ---
 

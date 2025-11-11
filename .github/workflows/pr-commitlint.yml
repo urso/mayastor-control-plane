@@ -13,6 +13,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Check PR labels
+        id: pr-labels
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          labels=$(gh pr view ${{ github.event.pull_request.number }} --json labels --jq '.labels[].name' | tr '\n' ',' || echo "")
+          echo "labels=${labels}" >> $GITHUB_OUTPUT
+          if echo "$labels" | grep -q "upstream-sync"; then
+            echo "is_upstream_sync=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_upstream_sync=false" >> $GITHUB_OUTPUT
+          fi
       - name: Install CommitLint and Dependencies
         run: npm install @commitlint/config-conventional @commitlint/cli
       - name: Lint Commits
@@ -25,10 +38,16 @@ jobs:
             sed "s/code-review-rule': \[0/code-review-rule': [2/g" -i commitlint.config.js
             npx commitlint --from $first_commit --to $last_commit -V
 
-            git log --pretty=format:%s $first_commit..$last_commit > ./subjects
-            duplicates="$(cat ./subjects | sort | uniq -D)"
-            if [ "$duplicates" != "" ]; then
-              echo -e "Duplicate commits found:\n$duplicates" >&2
-              exit 1
+            # Skip duplicate check for upstream sync PRs as they may contain
+            # automated commits from upstream with duplicate messages
+            if [ "${{ steps.pr-labels.outputs.is_upstream_sync }}" != "true" ]; then
+              git log --pretty=format:%s $first_commit..$last_commit > ./subjects
+              duplicates="$(cat ./subjects | sort | uniq -D)"
+              if [ "$duplicates" != "" ]; then
+                echo -e "Duplicate commits found:\n$duplicates" >&2
+                exit 1
+              fi
+            else
+              echo "⏭️  Skipping duplicate check for upstream sync PR"
             fi
           fi
