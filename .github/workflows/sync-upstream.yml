@@ -70,7 +70,7 @@ jobs:
           GIT_COMMITTER_NAME: 'Xata Bot'
           GIT_COMMITTER_EMAIL: 'xata-bot@users.noreply.github.com'
         run: |
-          CMD="./utils/dependencies/scripts/xata/sync-upstream.sh --target-branch ${{ github.ref_name }}"
+          CMD="./scripts/xata/sync-upstream.sh --target-branch ${{ github.ref_name }}"
           if [ -n "${{ inputs.upstream_branch }}" ]; then
             CMD="$CMD --upstream-branch ${{ inputs.upstream_branch }}"
           fi
@@ -88,8 +88,8 @@ jobs:
           GIT_COMMITTER_NAME: 'Xata Bot'
           GIT_COMMITTER_EMAIL: 'xata-bot@users.noreply.github.com'
         run: |
-          echo "Updating xataio submodules to latest versions..."
-          ./utils/dependencies/scripts/xata/update-submodules.sh
+          echo "Updating xataio submodules (only if changed in upstream merge)..."
+          ./scripts/xata/update-submodules.sh --only-if-changed
 
           # Check if submodule updates created any changes
           if git diff --quiet && git diff --staged --quiet; then
