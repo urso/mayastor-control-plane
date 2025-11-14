@@ -51,6 +51,9 @@ pub struct DiskPoolSpec {
     /// Example: 5x, 10x, 6x, 200GiB, 2TiB or 536870912000B.
     #[serde(rename = "maxExpansion")]
     pub max_expansion: Option<String>,
+    /// Pool configuration specifying the type and parameters.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raid_config: Option<RaidConfig>,
 }
 
 /// Placement pool topology used by volume operations.
@@ -80,6 +83,20 @@ pub struct EncryptionSecretConfig {
     pub name: String,
 }
 
+/// Raid configuration types.
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, JsonSchema)]
+pub enum RaidConfig {
+    #[serde(rename = "raid0")]
+    Raid0(Raid0Config),
+}
+
+/// RAID0 configuration parameters.
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, JsonSchema)]
+pub struct Raid0Config {
+    #[serde(rename = "stripSize")]
+    pub strip_size: Quantity,
+}
+
 impl DiskPoolSpec {
     /// Create a new DiskPoolSpec from the node and the disks.
     pub fn new(
@@ -97,6 +114,7 @@ impl DiskPoolSpec {
             encryption_config,
             cluster_size,
             max_expansion,
+            raid_config: None,
         }
     }
     /// The node the pool is placed on.

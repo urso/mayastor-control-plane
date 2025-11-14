@@ -125,6 +125,7 @@ impl TryFrom<pool::PoolDefinition> for PoolSpec {
                 .cluster_size
                 .unwrap_or(POOL_BS_CLUSTER_SIZE_DEFAULT),
             max_expansion: None,
+            raid_config: None,
         })
     }
 }
@@ -156,6 +157,12 @@ impl TryFrom<pool::PoolState> for PoolState {
                 .unwrap_or(POOL_BS_CLUSTER_SIZE_DEFAULT),
             disk_capacity: pool_state.disk_capacity,
             max_expandable_size: pool_state.max_expandable_size,
+            raid_info: pool_state.xata_raid_info.map(|raid_info| {
+                stor_port::types::v0::transport::RaidInfo {
+                    level: raid_info.level,
+                    state: raid_info.state,
+                }
+            }),
         })
     }
 }
@@ -219,6 +226,7 @@ impl From<PoolSpec> for pool::PoolDefinition {
                     None => None,
                 },
                 cluster_size: Some(pool_spec.cluster_size),
+                xata_raid_config: None,
             }),
             metadata: Some(pool::Metadata {
                 uuid: None,
@@ -242,6 +250,7 @@ impl From<PoolState> for pool::PoolState {
             cluster_size: Some(pool_state.cluster_size),
             disk_capacity: pool_state.disk_capacity,
             max_expandable_size: pool_state.max_expandable_size,
+            xata_raid_info: None,
         }
     }
 }
@@ -428,6 +437,7 @@ impl From<&dyn CreatePoolInfo> for CreatePoolRequest {
             encryption: data.encryption().into_opt(),
             cluster_size: data.cluster_size(),
             max_expansion: data.max_expansion(),
+            xata_raid_config: None,
         }
     }
 }
@@ -442,6 +452,7 @@ impl From<&dyn CreatePoolInfo> for CreatePool {
             encryption: data.encryption(),
             cluster_size: data.cluster_size(),
             max_expansion: data.max_expansion(),
+            raid_config: None,
         }
     }
 }

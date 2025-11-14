@@ -150,6 +150,7 @@ async fn snapshot_clone_pool_cluster_size_constraint() {
         encryption: None,
         cluster_size: None,
         max_expansion: None,
+        raid_config: None,
     };
 
     let pool_32m_1 = CreatePool {
@@ -160,6 +161,7 @@ async fn snapshot_clone_pool_cluster_size_constraint() {
         encryption: None,
         cluster_size: Some(33554432),
         max_expansion: None,
+        raid_config: None,
     };
 
     let pool_32m_2 = CreatePool {
@@ -170,6 +172,7 @@ async fn snapshot_clone_pool_cluster_size_constraint() {
         encryption: None,
         cluster_size: Some(33554432),
         max_expansion: None,
+        raid_config: None,
     };
 
     let _ = client.pool().create(&pool_4m_1, None).await.unwrap();

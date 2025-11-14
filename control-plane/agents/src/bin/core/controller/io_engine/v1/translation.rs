@@ -662,6 +662,7 @@ impl IoEngineToAgent for v1::pool::Pool {
             cluster_size: self.cluster_size,
             disk_capacity: Some(self.disk_capacity),
             max_expandable_size: self.max_expandable_size,
+            raid_info: None,
         }
     }
 }

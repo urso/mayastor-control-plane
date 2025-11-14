@@ -118,6 +118,7 @@ impl CreatePoolBody {
             encryption: self.encryption.clone().into_opt(),
             cluster_size: self.cluster_size,
             max_expansion: self.max_expansion.clone(),
+            raid_config: None,
         }
     }
 }

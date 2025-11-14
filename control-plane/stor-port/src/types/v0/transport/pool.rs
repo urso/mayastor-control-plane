@@ -1,7 +1,7 @@
 use super::*;
 
 use crate::{
-    types::v0::store::pool::{Encryption, EncryptionSecret, PoolLabel, PoolSpec},
+    types::v0::store::pool::{Encryption, EncryptionSecret, PoolLabel, PoolSpec, RaidConfig},
     IntoOption,
 };
 use serde::{Deserialize, Serialize};
@@ -108,6 +108,8 @@ pub struct PoolState {
     pub disk_capacity: Option<u64>,
     /// Maximum disk_capacity this pool can be expanded to, in bytes.
     pub max_expandable_size: Option<u64>,
+    /// Raid information if the pool uses RAID storage.
+    pub raid_info: Option<RaidInfo>,
 }
 
 impl From<CtrlPoolState> for models::PoolState {
@@ -162,6 +164,15 @@ impl PartialOrd for PoolStatus {
             },
         }
     }
+}
+
+/// RAID status information as reported by io-engine.
+#[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
+pub struct RaidInfo {
+    /// RAID level (e.g. "raid0", "raid1", "raid5").
+    pub level: String,
+    /// RAID state (e.g. "online", "configuring", "offline").
+    pub state: String,
 }
 
 /// A Storage Pool.
@@ -298,6 +309,8 @@ pub struct CreatePool {
     pub id: PoolId,
     /// Disk device paths or URIs to be claimed by the pool.
     pub disks: Vec<PoolDeviceUri>,
+    /// Pool configuration specifying the type and parameters.
+    pub raid_config: Option<RaidConfig>,
     /// Labels to be set on the pool.
     pub labels: Option<PoolLabel>,
     /// Encryption parameters for this pool.
@@ -310,10 +323,12 @@ pub struct CreatePool {
 
 impl CreatePool {
     /// Create new `Self` from the given parameters.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         node: &NodeId,
         id: &PoolId,
         disks: &[PoolDeviceUri],
+        raid_config: &Option<RaidConfig>,
         labels: &Option<PoolLabel>,
         encryption: &Option<Encryption>,
         cluster_size: &Option<u32>,
@@ -323,6 +338,7 @@ impl CreatePool {
             node: node.clone(),
             id: id.clone(),
             disks: disks.to_vec(),
+            raid_config: raid_config.clone(),
             labels: labels.clone(),
             encryption: encryption.clone(),
             cluster_size: *cluster_size,
@@ -345,6 +361,8 @@ pub struct ImportPool {
     pub uuid: Option<PoolUuid>,
     /// Encryption parameters for this pool.
     pub encryption: Option<Encryption>,
+    /// Raid information if the pool uses RAID storage.
+    pub raid_config: Option<RaidConfig>,
 }
 
 impl ImportPool {
@@ -361,6 +379,7 @@ impl ImportPool {
             disks: disks.to_vec(),
             uuid: None,
             encryption: encryption.clone(),
+            raid_config: None,
         }
     }
 }
