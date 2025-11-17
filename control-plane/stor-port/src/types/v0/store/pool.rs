@@ -154,12 +154,11 @@ pub struct EncryptionSecret {
     pub name: String,
 }
 
-/// Pool configuration specifying the type and parameters.
+/// RAID configuration specifying the type and parameters.
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq)]
 pub enum RaidConfig {
     /// RAID0 configuration with strip size in KB.
     Raid0 { strip_size_kb: u32 },
-    // Future: Raid1 { mirror_policy: MirrorPolicy },
 }
 
 impl RaidConfig {
@@ -174,8 +173,7 @@ impl RaidConfig {
                         reason: "RAID0 configuration requires at least 2 disks".to_string(),
                     });
                 }
-                if *strip_size_kb == 0 || !strip_size_kb.is_power_of_two() || *strip_size_kb < 4096
-                {
+                if *strip_size_kb == 0 || !strip_size_kb.is_power_of_two() || *strip_size_kb < 4 {
                     let reason = if *strip_size_kb == 0 {
                         "Strip size must be greater than 0".to_string()
                     } else {

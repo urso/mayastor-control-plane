@@ -371,6 +371,7 @@ impl ImportPool {
         node: &NodeId,
         id: &PoolId,
         disks: &[PoolDeviceUri],
+        raid_config: &Option<RaidConfig>,
         encryption: &Option<Encryption>,
     ) -> Self {
         Self {
@@ -379,7 +380,7 @@ impl ImportPool {
             disks: disks.to_vec(),
             uuid: None,
             encryption: encryption.clone(),
-            raid_config: None,
+            raid_config: raid_config.clone(),
         }
     }
 }
