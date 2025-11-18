@@ -9,7 +9,7 @@ pub use stor_port::{
         openapi::{
             apis, apis::actix_server::RestError, models, models::RestJsonError, tower::client,
         },
-        store::pool::PoolLabel,
+        store::pool::{PoolLabel, RaidConfig},
         transport::{
             AddNexusChild, BlockDevice, Child, ChildUri, CreateNexus, CreatePool, CreateReplica,
             CreateVolume, DestroyNexus, DestroyPool, DestroyReplica, DestroyVolume, Filter,
@@ -82,15 +82,21 @@ pub struct CreatePoolBody {
     pub cluster_size: Option<u32>,
     /// Maximum expansion size for this pool.
     pub max_expansion: Option<String>,
+    /// Pool configuration for RAID0 and other pool types
+    pub raid_config: Option<RaidConfig>,
 }
+
 impl From<models::CreatePoolBody> for CreatePoolBody {
     fn from(src: models::CreatePoolBody) -> Self {
+        let raid_config = src.raid_config.map(From::from);
+
         Self {
             disks: src.disks.iter().cloned().map(From::from).collect(),
             labels: src.labels,
             encryption: src.encryption.into_opt(),
             cluster_size: src.cluster_size.map(|v| v as u32),
             max_expansion: src.max_expansion,
+            raid_config,
         }
     }
 }
@@ -104,6 +110,7 @@ impl TryFrom<CreatePool> for CreatePoolBody {
             encryption: create.encryption.try_into_opt()?,
             cluster_size: create.cluster_size,
             max_expansion: create.max_expansion,
+            raid_config: create.raid_config,
         })
     }
 }
@@ -118,7 +125,7 @@ impl CreatePoolBody {
             encryption: self.encryption.clone().into_opt(),
             cluster_size: self.cluster_size,
             max_expansion: self.max_expansion.clone(),
-            raid_config: None,
+            raid_config: self.raid_config.clone(),
         }
     }
 }

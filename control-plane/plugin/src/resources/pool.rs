@@ -38,18 +38,30 @@ impl CreateRow for openapi::models::Pool {
         let spec = self.spec.clone().unwrap_or_default();
         // In case the state is not coming as filled, either due to pool, node lost, fill in
         // spec data and mark the status as Unknown.
-        let state = self.state.clone().unwrap_or(openapi::models::PoolState {
-            capacity: 0,
-            disks: spec.disks,
-            id: spec.id,
-            node: spec.node,
-            status: openapi::models::PoolStatus::Unknown,
-            used: 0,
-            committed: None,
-            encrypted: spec.encryption.is_some(),
-            cluster_size: Some(0),
-            disk_capacity: None,
-            max_expandable_size: None,
+        let state = self.state.clone().unwrap_or_else(|| {
+            let raid_info = spec
+                .raid_config
+                .as_ref()
+                .map(|raid_config| match raid_config {
+                    openapi::models::RaidConfig::raid0(_) => {
+                        openapi::models::RaidInfo::new("raid0", "unknown")
+                    }
+                });
+
+            openapi::models::PoolState {
+                capacity: 0,
+                disks: spec.disks,
+                id: spec.id,
+                node: spec.node,
+                status: openapi::models::PoolStatus::Unknown,
+                used: 0,
+                committed: None,
+                encrypted: spec.encryption.is_some(),
+                cluster_size: Some(0),
+                disk_capacity: None,
+                max_expandable_size: None,
+                raid_info,
+            }
         });
         let free = state.capacity.saturating_sub(state.used);
         let disks = state.disks.join(", ");

@@ -418,6 +418,7 @@ impl From<PoolSpec> for models::PoolSpec {
             src.cordon_drain.into_opt(),
             Some(src.cluster_size as i64),
             src.max_expansion,
+            src.raid_config.map(Into::into),
         )
     }
 }
@@ -755,6 +756,27 @@ impl From<CordonDrainState> for models::PoolCordonDrain {
                 };
                 Self::cordoned(cs)
             }
+        }
+    }
+}
+
+impl From<RaidConfig> for models::RaidConfig {
+    fn from(src: RaidConfig) -> Self {
+        match src {
+            RaidConfig::Raid0 { strip_size_kb } => {
+                let raid0_config = models::Raid0Config::new(strip_size_kb);
+                models::RaidConfig::raid0(raid0_config)
+            }
+        }
+    }
+}
+
+impl From<models::RaidConfig> for RaidConfig {
+    fn from(src: models::RaidConfig) -> Self {
+        match src {
+            models::RaidConfig::raid0(raid0_config) => RaidConfig::Raid0 {
+                strip_size_kb: raid0_config.strip_size_kb,
+            },
         }
     }
 }

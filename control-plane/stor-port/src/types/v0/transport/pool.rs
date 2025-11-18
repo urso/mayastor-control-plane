@@ -127,6 +127,7 @@ impl From<CtrlPoolState> for models::PoolState {
             Some(src.cluster_size as u64),
             src.disk_capacity,
             src.max_expandable_size,
+            src.raid_info.map(Into::into),
         )
     }
 }
@@ -173,6 +174,21 @@ pub struct RaidInfo {
     pub level: String,
     /// RAID state (e.g. "online", "configuring", "offline").
     pub state: String,
+}
+
+impl From<RaidInfo> for models::RaidInfo {
+    fn from(src: RaidInfo) -> Self {
+        Self::new(src.level, src.state)
+    }
+}
+
+impl From<models::RaidInfo> for RaidInfo {
+    fn from(src: models::RaidInfo) -> Self {
+        Self {
+            level: src.level,
+            state: src.state,
+        }
+    }
 }
 
 /// A Storage Pool.

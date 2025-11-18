@@ -30,7 +30,8 @@ use super::quantity::Quantity;
     printcolumn = r#"{ "name":"used", "type":"string", "nullable": "true", "description":"used bytes", "jsonPath":".status.used_q"}"#,
     printcolumn = r#"{ "name":"available", "type":"string", "nullable": "true", "description":"available bytes", "jsonPath":".status.available_q"}"#,
     printcolumn = r#"{ "name":"disk-capacity", "type":"string", "nullable": "true", "description":"underlying disk capacity", "jsonPath":".status.diskCapacity"}"#,
-    printcolumn = r#"{ "name":"max-expandable-size", "type":"string", "nullable": "true", "description":"max expandable size", "jsonPath":".status.maxExpandableSize"}"#
+    printcolumn = r#"{ "name":"max-expandable-size", "type":"string", "nullable": "true", "description":"max expandable size", "jsonPath":".status.maxExpandableSize"}"#,
+    printcolumn = r#"{ "name":"raid", "type":"string", "nullable": "true", "description":"RAID type", "jsonPath":".spec.raidConfig.type"}"#,
 )]
 /// The pool spec which contains the parameters we use when creating the pool
 pub struct DiskPoolSpec {
@@ -51,8 +52,8 @@ pub struct DiskPoolSpec {
     /// Example: 5x, 10x, 6x, 200GiB, 2TiB or 536870912000B.
     #[serde(rename = "maxExpansion")]
     pub max_expansion: Option<String>,
-    /// Pool configuration specifying the type and parameters.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// RAID configuration specifying the type and parameters.
+    #[serde(rename = "raidConfig", skip_serializing_if = "Option::is_none")]
     pub raid_config: Option<RaidConfig>,
 }
 
@@ -85,6 +86,7 @@ pub struct EncryptionSecretConfig {
 
 /// Raid configuration types.
 #[derive(Serialize, Deserialize, Debug, Clone, Eq, PartialEq, JsonSchema)]
+#[serde(tag = "type", content = "config", rename_all = "lowercase")]
 pub enum RaidConfig {
     #[serde(rename = "raid0")]
     Raid0(Raid0Config),
@@ -97,6 +99,21 @@ pub struct Raid0Config {
     pub strip_size: Quantity,
 }
 
+#[cfg(feature = "openapi")]
+/// Convert CRD RaidConfig to transport layer RaidConfig
+impl From<RaidConfig> for openapi::models::RaidConfig {
+    fn from(crd_config: RaidConfig) -> Self {
+        match crd_config {
+            RaidConfig::Raid0(raid0_config) => {
+                // Convert bytes to KB for internal transport layer
+                let strip_size_kb = (raid0_config.strip_size.bytes() / 1024) as u32;
+                let openapi_raid0 = openapi::models::Raid0Config::new(strip_size_kb);
+                openapi::models::RaidConfig::raid0(openapi_raid0)
+            }
+        }
+    }
+}
+
 impl DiskPoolSpec {
     /// Create a new DiskPoolSpec from the node and the disks.
     pub fn new(
@@ -106,6 +123,7 @@ impl DiskPoolSpec {
         encryption_config: Option<EncryptionConfig>,
         cluster_size: Option<String>,
         max_expansion: Option<String>,
+        raid_config: Option<RaidConfig>,
     ) -> Self {
         Self {
             node,
@@ -114,7 +132,7 @@ impl DiskPoolSpec {
             encryption_config,
             cluster_size,
             max_expansion,
-            raid_config: None,
+            raid_config,
         }
     }
     /// The node the pool is placed on.

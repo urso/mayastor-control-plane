@@ -9,6 +9,10 @@ spec:
         name: string
   maxExpansion: string
   node: string
+  raidConfig:
+    config:
+      stripSize: "100 GiB"
+    type: "raid0" # "raid0"
   topology:
     labelled: {}
 status:

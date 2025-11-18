@@ -1,4 +1,5 @@
-use super::crd::v1beta3::{DiskPool, DiskPoolSpec, EncryptionSource};
+use super::crd::quantity::Quantity;
+use super::crd::v1beta3::{DiskPool, DiskPoolSpec, EncryptionSource, Raid0Config, RaidConfig};
 use crate::{diskpool::crd::diskpools_name, error::Error, ApiVersion};
 use openapi::models::PoolSpecEncryption;
 use openapi::{apis::StatusCode, clients};
@@ -100,6 +101,7 @@ pub(crate) async fn create_missing_cr(
                                 }
                             },
                         };
+
                         let cr_spec: DiskPoolSpec = DiskPoolSpec::new(
                             spec.node.clone(),
                             spec.disks.clone(),
@@ -108,7 +110,20 @@ pub(crate) async fn create_missing_cr(
                             spec.cluster_size
                                 .map(|c| utils::bytes::into_human(c as u64)),
                             spec.max_expansion.clone(),
+                            spec.raid_config.as_ref().map(|openapi_config| {
+                                match openapi_config {
+                                    openapi::models::RaidConfig::raid0(raid0_config) => {
+                                        // Convert u32 KB to bytes for Quantity
+                                        let strip_size_bytes =
+                                            (raid0_config.strip_size_kb as u64) * 1024;
+                                        RaidConfig::Raid0(Raid0Config {
+                                            strip_size: Quantity::from_bytes(strip_size_bytes),
+                                        })
+                                    }
+                                }
+                            }),
                         );
+
                         let new_disk_pool: DiskPool = DiskPool::new(&pool.id, cr_spec);
                         if let Err(error) = pools_api.create(&param, &new_disk_pool).await {
                             info!(pool.id, spec.node, %error, "Failed to create CR for missing DiskPool");
