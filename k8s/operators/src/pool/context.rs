@@ -306,12 +306,14 @@ impl ResourceContext {
             None => None,
         };
 
+        let raid_config = self.spec.raid_config.as_ref().map(|r| r.clone().into());
         let body = CreatePoolBody::new_all(
             self.spec.disks(),
             labels,
             encryption,
             cluster_size,
             self.spec.max_expansion(),
+            raid_config,
         );
         match self
             .pools_api()

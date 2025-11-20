@@ -13,7 +13,7 @@ use stor_port::{
     types::v0::{
         store::pool::{
             CordonDrainState, CordonedState, Encryption, EncryptionSecret, PoolLabel, PoolSpec,
-            PoolSpecStatus, POOL_BS_CLUSTER_SIZE_DEFAULT,
+            PoolSpecStatus, RaidConfig, POOL_BS_CLUSTER_SIZE_DEFAULT,
         },
         transport::{
             CreatePool, CtrlPoolState, DestroyPool, ExpandPool, Filter, LabelPool, NodeId, Pool,
@@ -125,6 +125,9 @@ impl TryFrom<pool::PoolDefinition> for PoolSpec {
                 .cluster_size
                 .unwrap_or(POOL_BS_CLUSTER_SIZE_DEFAULT),
             max_expansion: None,
+            raid_config: pool_spec
+                .xata_raid_config
+                .and_then(|rc| RaidConfig::try_from(rc).ok()),
         })
     }
 }
@@ -156,6 +159,12 @@ impl TryFrom<pool::PoolState> for PoolState {
                 .unwrap_or(POOL_BS_CLUSTER_SIZE_DEFAULT),
             disk_capacity: pool_state.disk_capacity,
             max_expandable_size: pool_state.max_expandable_size,
+            raid_info: pool_state.xata_raid_info.map(|raid_info| {
+                stor_port::types::v0::transport::RaidInfo {
+                    level: raid_info.level,
+                    state: raid_info.state,
+                }
+            }),
         })
     }
 }
@@ -219,6 +228,7 @@ impl From<PoolSpec> for pool::PoolDefinition {
                     None => None,
                 },
                 cluster_size: Some(pool_spec.cluster_size),
+                xata_raid_config: pool_spec.raid_config.map(|rc| rc.into()),
             }),
             metadata: Some(pool::Metadata {
                 uuid: None,
@@ -242,6 +252,10 @@ impl From<PoolState> for pool::PoolState {
             cluster_size: Some(pool_state.cluster_size),
             disk_capacity: pool_state.disk_capacity,
             max_expandable_size: pool_state.max_expandable_size,
+            xata_raid_info: pool_state.raid_info.map(|raid_info| pool::RaidInfo {
+                level: raid_info.level,
+                state: raid_info.state,
+            }),
         }
     }
 }
@@ -318,6 +332,8 @@ pub trait CreatePoolInfo: Send + Sync + std::fmt::Debug {
     fn cluster_size(&self) -> Option<u32>;
     /// Maximum expansion size for this pool.
     fn max_expansion(&self) -> Option<String>;
+    /// RAID configuration for the pool.
+    fn raid_config(&self) -> Option<RaidConfig>;
 }
 
 /// DestroyPoolInfo trait for the pool deletion to be implemented by entities which want to avail
@@ -356,6 +372,10 @@ impl CreatePoolInfo for CreatePool {
 
     fn max_expansion(&self) -> Option<String> {
         self.max_expansion.clone()
+    }
+
+    fn raid_config(&self) -> Option<RaidConfig> {
+        self.raid_config.clone()
     }
 }
 
@@ -397,6 +417,11 @@ impl CreatePoolInfo for ValidatedCreatePoolRequest {
     fn max_expansion(&self) -> Option<String> {
         self.inner.max_expansion.clone()
     }
+
+    fn raid_config(&self) -> Option<RaidConfig> {
+        let inner = self.inner.xata_raid_config.as_ref();
+        inner.and_then(|rc| RaidConfig::try_from(*rc).ok())
+    }
 }
 
 impl ValidateRequestTypes for CreatePoolRequest {
@@ -428,6 +453,7 @@ impl From<&dyn CreatePoolInfo> for CreatePoolRequest {
             encryption: data.encryption().into_opt(),
             cluster_size: data.cluster_size(),
             max_expansion: data.max_expansion(),
+            xata_raid_config: data.raid_config().map(|rc| rc.into()),
         }
     }
 }
@@ -442,6 +468,7 @@ impl From<&dyn CreatePoolInfo> for CreatePool {
             encryption: data.encryption(),
             cluster_size: data.cluster_size(),
             max_expansion: data.max_expansion(),
+            raid_config: data.raid_config(),
         }
     }
 }
@@ -726,6 +753,35 @@ impl From<PoolCordonRequest> for CordonPoolRequest {
             snapshots: value.snapshots,
             restores: value.restores,
             import: value.import,
+        }
+    }
+}
+
+impl TryFrom<pool::RaidConfig> for RaidConfig {
+    type Error = ReplyError;
+
+    fn try_from(raid_config: pool::RaidConfig) -> Result<Self, Self::Error> {
+        match raid_config.config {
+            Some(pool::raid_config::Config::Raid0(raid0_config)) => Ok(RaidConfig::Raid0 {
+                strip_size_kb: raid0_config.strip_size_kb,
+            }),
+            None => Err(ReplyError::invalid_argument(
+                ResourceKind::Pool,
+                "raid_config.config",
+                "RAID configuration is missing".to_string(),
+            )),
+        }
+    }
+}
+
+impl From<RaidConfig> for pool::RaidConfig {
+    fn from(raid_config: RaidConfig) -> Self {
+        match raid_config {
+            RaidConfig::Raid0 { strip_size_kb } => pool::RaidConfig {
+                config: Some(pool::raid_config::Config::Raid0(pool::Raid0Config {
+                    strip_size_kb,
+                })),
+            },
         }
     }
 }

@@ -61,6 +61,7 @@ async fn pool() {
                 encryption: None,
                 cluster_size: None,
                 max_expansion: None,
+                raid_config: None,
             },
             None,
         )
@@ -76,6 +77,7 @@ async fn pool() {
                 encryption: None,
                 cluster_size: None,
                 max_expansion: None,
+                raid_config: None,
             },
             None,
         )
@@ -297,6 +299,7 @@ async fn pool_expansion() {
                 node: cluster.node(0),
                 id: "pool-1".into(),
                 disks: vec![pool_disk_one.path().into()],
+                raid_config: None,
                 labels: None,
                 encryption: None,
                 cluster_size: None,
@@ -313,6 +316,7 @@ async fn pool_expansion() {
                 node: cluster.node(0),
                 id: "pool-2".into(),
                 disks: vec![pool_disk_two.path().into()],
+                raid_config: None,
                 labels: None,
                 encryption: None,
                 cluster_size: None,
@@ -461,6 +465,7 @@ async fn volume_repl_placement_with_cluster_size() {
         encryption: None,
         cluster_size: None,
         max_expansion: None,
+        raid_config: None,
     };
 
     let pool_32m_1 = CreatePool {
@@ -471,6 +476,7 @@ async fn volume_repl_placement_with_cluster_size() {
         encryption: None,
         cluster_size: Some(33554432),
         max_expansion: None,
+        raid_config: None,
     };
 
     let pool_32m_2 = CreatePool {
@@ -481,6 +487,7 @@ async fn volume_repl_placement_with_cluster_size() {
         encryption: None,
         cluster_size: Some(33554432),
         max_expansion: None,
+        raid_config: None,
     };
 
     let _ = client.pool().create(&pool_4m_1, None).await.unwrap();
@@ -1331,6 +1338,7 @@ async fn destroy_after_restart() {
         encryption: None,
         cluster_size: None,
         max_expansion: None,
+        raid_config: None,
     };
 
     client.pool().destroy(&destroy, None).await.unwrap();
@@ -1368,6 +1376,7 @@ async fn slow_create() {
             encryption: None,
             cluster_size: None,
             max_expansion: None,
+            raid_config: None,
         };
 
         let result = client.pool().create(&create, None).await;
@@ -1541,6 +1550,7 @@ async fn reject_devlink_reuse() {
             })),
             cluster_size: None,
             max_expansion: None,
+            raid_config: None,
         };
 
         client
@@ -1563,6 +1573,7 @@ async fn reject_devlink_reuse() {
             })),
             cluster_size: None,
             max_expansion: None,
+            raid_config: None,
         };
 
         client
@@ -1615,6 +1626,7 @@ async fn reject_devlink_reuse() {
             encryption: None,
             cluster_size: None,
             max_expansion: None,
+            raid_config: None,
         };
 
         client

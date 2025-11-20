@@ -11,7 +11,7 @@ use stor_port::{
     transport_api::ResourceKind,
     types::v0::{
         openapi::apis::IntoVec,
-        store::pool::{Encryption, EncryptionSecret},
+        store::pool::{Encryption, EncryptionSecret, RaidConfig},
         transport::{
             self, ChildState, ChildStateReason, Nexus, NexusId, NexusNvmePreemption,
             NexusNvmfConfig, NexusStatus, NodeId, NvmeReservation, PoolState, PoolUuid, Protocol,
@@ -662,6 +662,13 @@ impl IoEngineToAgent for v1::pool::Pool {
             cluster_size: self.cluster_size,
             disk_capacity: Some(self.disk_capacity),
             max_expandable_size: self.max_expandable_size,
+            raid_info: self
+                .xata_raid_info
+                .as_ref()
+                .map(|raid_info| transport::RaidInfo {
+                    level: raid_info.level.clone(),
+                    state: raid_info.state.clone(),
+                }),
         }
     }
 }
@@ -684,6 +691,12 @@ impl AgentToIoEngine for transport::CreatePool {
                 .encryption
                 .clone()
                 .map(|encryption| From::from(ExternalType(encryption))),
+            // Pass RAID0 configuration to io-engine for multi-device pools
+            // None = standard LVS pool, Some(Raid0) = RAID0 striped pool
+            xata_raid_config: self
+                .raid_config
+                .clone()
+                .map(|config| From::from(ExternalType(config))),
         }
     }
 }
@@ -722,6 +735,10 @@ impl AgentToIoEngine for transport::ImportPool {
                 .encryption
                 .clone()
                 .map(|encryption| From::from(ExternalType(encryption))),
+            xata_raid_config: self
+                .raid_config
+                .clone()
+                .map(|config| From::from(ExternalType(config))),
         }
     }
 }
@@ -918,6 +935,18 @@ impl From<ExternalType<EncryptionSecret>> for v1::pb::EncryptionSecret {
     fn from(value: ExternalType<EncryptionSecret>) -> Self {
         Self {
             secret: value.0.name,
+        }
+    }
+}
+
+impl From<ExternalType<RaidConfig>> for v1::pb::XataRaidConfig {
+    fn from(value: ExternalType<RaidConfig>) -> Self {
+        match value.0 {
+            RaidConfig::Raid0 { strip_size_kb } => Self {
+                config: Some(v1::pb::xata_raid_config::Config::Raid0(
+                    v1::pb::Raid0Config { strip_size_kb },
+                )),
+            },
         }
     }
 }

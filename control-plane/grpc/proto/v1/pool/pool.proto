@@ -54,6 +54,9 @@ message PoolSpec {
   }
   // Blobstore cluster size required for this pool
   optional uint32 cluster_size = 8;
+
+  // Raid configuration specifying the type and parameters
+  optional RaidConfig xata_raid_config = 10009;
 }
 
 // Pool information
@@ -80,6 +83,9 @@ message PoolState {
   optional uint64 disk_capacity = 10;
   // Maximum disk_capacity this pool can be expanded to, in bytes
   optional uint64 max_expandable_size = 11;
+  
+  // Raid information if the pool uses RAID storage
+  optional RaidInfo xata_raid_info = 100012;
 }
 
 // status of the pool
@@ -104,6 +110,27 @@ message GetPoolsRequest {
   }
 }
 
+// Raid configuration specifying the type and parameters
+message RaidConfig {
+  oneof config {
+    Raid0Config raid0 = 1;
+  }
+}
+
+// RAID0 configuration parameters
+message Raid0Config {
+  // Strip size in KB (default 64)
+  uint32 strip_size_kb = 1;
+}
+
+// RAID status information as reported by io-engine
+message RaidInfo {
+  // RAID level (e.g. "raid0", "raid1", "raid5")
+  string level = 1;
+  // RAID state (e.g. "online", "configuring", "offline")
+  string state = 2;
+}
+
 // Create Pool Request
 message CreatePoolRequest {
   // id of the io-engine instance
@@ -123,6 +150,9 @@ message CreatePoolRequest {
   optional uint32 cluster_size = 7;
   // Maximum expansion size for this pool
   optional string max_expansion = 8;
+
+  // Raid configuration specifying the type and parameters
+  optional RaidConfig xata_raid_config = 10009;
 }
 
 // Destroy Pool Request

@@ -86,6 +86,7 @@ impl IoEngine {
                 md_info: None,
                 encrypted: Some(state.encrypted),
                 max_expandable_size: state.max_expandable_size,
+                xata_raid_info: None,
             };
             if let Some(node) = io_engine.sims.get_mut(state.node.as_str()) {
                 node.pools.push(pool);

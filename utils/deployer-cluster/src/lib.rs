@@ -526,8 +526,12 @@ impl Cluster {
         )
         .unwrap();
 
+        let timeout_secs = std::env::var("DEPLOYER_CLUSTER_TIMEOUT")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(30);
         components
-            .start_wait(&composer, std::time::Duration::from_secs(30))
+            .start_wait(&composer, std::time::Duration::from_secs(timeout_secs))
             .await?;
 
         let unknown_module = "unknown".to_string();
@@ -1158,6 +1162,7 @@ impl ClusterBuilder {
                         encryption: None,
                         cluster_size: None,
                         max_expansion: None,
+                        raid_config: None,
                     },
                     None,
                 )

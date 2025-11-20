@@ -111,6 +111,28 @@ pub enum SvcError {
     PoolNotFound { pool_id: PoolId },
     #[snafu(display("Disk list should have only 1 device. Received :{:?}", disks))]
     InvalidPoolDeviceNum { disks: Vec<PoolDeviceUri> },
+    #[snafu(display(
+        "Invalid pool disk count: {} disks provided, {} required. {}",
+        disk_count,
+        minimum_required,
+        reason
+    ))]
+    InvalidPoolDiskCount {
+        disk_count: usize,
+        minimum_required: usize,
+        reason: String,
+    },
+    #[snafu(display(
+        "Invalid RAID0 strip size: {} bytes (minimum {}). {}",
+        strip_size,
+        minimum_size,
+        reason
+    ))]
+    InvalidRaid0StripSize {
+        strip_size: u64,
+        minimum_size: u64,
+        reason: String,
+    },
     #[snafu(display("Nexus '{}' not found", nexus_id))]
     NexusNotFound { nexus_id: String },
     #[snafu(display(
@@ -467,6 +489,8 @@ impl SvcError {
             Self::RestrictedReplicaCount { .. } => tonic::Code::FailedPrecondition,
             Self::ReplicaSetPropertyFailed { .. } => tonic::Code::DataLoss,
             Self::ReplaceNqnNotFound { .. } => tonic::Code::FailedPrecondition,
+            Self::InvalidPoolDiskCount { .. } => tonic::Code::InvalidArgument,
+            Self::InvalidRaid0StripSize { .. } => tonic::Code::InvalidArgument,
             _ => tonic::Code::Internal,
         }
     }
@@ -752,6 +776,18 @@ impl From<SvcError> for ReplyError {
                 extra,
             },
             SvcError::InvalidPoolDeviceNum { .. } => ReplyError {
+                kind: ReplyErrorKind::InvalidArgument,
+                resource: ResourceKind::Pool,
+                source,
+                extra,
+            },
+            SvcError::InvalidPoolDiskCount { .. } => ReplyError {
+                kind: ReplyErrorKind::InvalidArgument,
+                resource: ResourceKind::Pool,
+                source,
+                extra,
+            },
+            SvcError::InvalidRaid0StripSize { .. } => ReplyError {
                 kind: ReplyErrorKind::InvalidArgument,
                 resource: ResourceKind::Pool,
                 source,
